@@ -1,0 +1,203 @@
+# -*- version: ord2 -*-
+# Single-ended output operational transconductance amplifier (OTA).
+# Hierarchical design using imported subcells:
+#   - SimpleMirror: generates tail bias current from reference (ibias)
+#   - DiffAmp: differential input stage sensing inp vs inn
+#   - Output stage: PMOS common-source amplifier (m_out_p) driven by
+#     diffamp output, with NMOS current source load (m_out_n)
+# Output transistor sizing is scaled by output_mult parameter for
+# driving capability.
+# Demonstrates: hierarchical design with multiple imported subcells,
+# parameter passing to subcells (.$ratio, .$l, .$w_unit),
+# inter-stage nets, configurable output sizing.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell DiffAmp:
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input inp(.align=Orientation.West)
+        input inn(.align=Orientation.West)
+        input vbias(.align=Orientation.West)
+        output outp(.align=Orientation.East)
+        output outn(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power ports
+        port vdd(.pos=(1, 29); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Input ports — both on left side
+        port inp(.pos=(1, 12); .align=Orientation.East)
+        port inn(.pos=(1, 15); .align=Orientation.East)
+        port vbias(.pos=(1, 4); .align=Orientation.East)
+
+        # Output ports — both on right side
+        port outp(.pos=(24, 20); .align=Orientation.West)
+        port outn(.pos=(24, 23); .align=Orientation.West)
+
+        # Internal nets
+        net tail
+
+        # Tail current source
+        Nmos m_tail(.pos=(12, 2); .g -- vbias; .d -- tail; .s -- vss; .b -- vss)
+
+        # Input differential pair
+        Nmos m_inp(.pos=(6, 10); .g -- inp; .d -- outn; .s -- tail; .b -- vss)
+        Nmos m_inn(.pos=(18, 10); .g -- inn; .d -- outp; .s -- tail; .b -- vss)
+
+        # PMOS active load (current mirror)
+        Pmos m_p1(.pos=(6, 22); .g -- outn; .d -- outn; .s -- vdd; .b -- vdd)
+        Pmos m_p2(.pos=(18, 22); .g -- outn; .d -- outp; .s -- vdd; .b -- vdd)
+
+cell SimpleMirror:
+    """
+    Simple PMOS current mirror with configurable ratio and sizing.
+
+    Parameters:
+        ratio: Current mirror ratio (Iout = ratio * Iref)
+        l: Channel length for all transistors (for matching)
+        w_unit: Unit transistor width
+
+    The output uses a single transistor with W = ratio * w_unit.
+    """
+    ratio = Parameter(int)
+    l = Parameter(R)
+    w_unit = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        input iref(.align=Orientation.West)
+        output iout(.align=Orientation.East)
+
+    viewgen schematic:
+        # Ports
+        port vdd(.pos=(1, 18); .align=Orientation.East)
+        port iref(.pos=(1, 6); .align=Orientation.East)
+        port iout(.pos=(24, 6); .align=Orientation.West)
+
+        # Reference transistor (diode-connected: gate tied to drain via iref)
+        Pmos m_ref:
+            .g -- iref
+            .d -- iref
+            .s -- vdd
+            .b -- vdd
+            .pos = (6, 10)
+            .$l = self.l
+            .$w = self.w_unit
+
+        # Output transistor (ratio * w_unit, gate mirrors reference)
+        Pmos m_out:
+            .g -- iref
+            .d -- iout
+            .s -- vdd
+            .b -- vdd
+            .pos = (16, 10)
+            .$l = self.l
+            .$w = self.w_unit * self.ratio
+
+cell ParameterizedOTA:
+    """
+    Single-ended output OTA with configurable output stage.
+
+    This demonstrates hierarchical design with parameter passing:
+    - Uses DiffAmp as the input stage
+    - Uses SimpleMirror for bias generation
+    - Configurable output transistor sizing
+
+    Parameters:
+        output_mult: Output stage width multiplier relative to input stage
+        l_bias: Channel length for bias transistors (matching)
+        w_bias: Width for bias transistors
+    """
+    output_mult = Parameter(int)
+    l_bias = Parameter(R)
+    w_bias = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input inp(.align=Orientation.West)
+        input inn(.align=Orientation.West)
+        input ibias(.align=Orientation.West)
+        output vout(.align=Orientation.East)
+
+    viewgen schematic:
+        # ==================================================
+        # Layout: Left-to-right signal flow
+        # - Bias mirror on far left
+        # - DiffAmp in center-left
+        # - Output stage on right
+        # ==================================================
+
+        # Power rails
+        port vdd(.pos=(1, 34); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Bias input (reference current)
+        port ibias(.pos=(1, 10); .align=Orientation.East)
+
+        # Differential inputs (aligned with diffamp)
+        port inp(.pos=(1, 22); .align=Orientation.East)
+        port inn(.pos=(1, 23); .align=Orientation.East)
+
+        # Output
+        port vout(.pos=(38, 20); .align=Orientation.West)
+
+        # Internal nets
+        net tail_bias
+        net diffamp_outn
+        net diffamp_outp
+
+        # ==================================================
+        # Bias current mirror (generates tail current)
+        # SimpleMirror: copies ibias to tail_bias
+        # ==================================================
+        SimpleMirror bias_mirror:
+            .vdd -- vss
+            .iref -- ibias
+            .iout -- tail_bias
+            .pos = (5, 2)
+            .$ratio = 1
+            .$l = self.l_bias
+            .$w_unit = self.w_bias
+
+        # ==================================================
+        # Input stage: Differential amplifier
+        # ==================================================
+        DiffAmp input_stage:
+            .vdd -- vdd
+            .vss -- vss
+            .inp -- inp
+            .inn -- inn
+            .vbias -- tail_bias
+            .outn -- diffamp_outn
+            .outp -- diffamp_outp
+            .pos = (13, 20)
+
+        # ==================================================
+        # Output stage: Common-source with current mirror load
+        # Sized by output_mult parameter
+        # ==================================================
+        # PMOS driver (driven by diffamp output)
+        Pmos m_out_p:
+            .g -- diffamp_outn
+            .d -- vout
+            .s -- vdd
+            .b -- vdd
+            .pos = (28, 28)
+            .$l = self.l_bias
+            .$w = self.w_bias * self.output_mult
+
+        # NMOS current source load (mirrored from bias)
+        Nmos m_out_n:
+            .g -- tail_bias
+            .d -- vout
+            .s -- vss
+            .b -- vss
+            .pos = (28, 10)
+            .$l = self.l_bias
+            .$w = self.w_bias * self.output_mult

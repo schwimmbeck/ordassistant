@@ -1,0 +1,121 @@
+# -*- version: ord2 -*-
+# Two-stage Miller-compensated operational amplifier.
+# Stage 1: Differential amplifier (DiffAmp) imported as a hierarchical
+#   subcell, providing differential-to-single-ended conversion.
+# Stage 2: Common-source gain stage with PMOS amplifier (m_cs) driven
+#   by stage 1 output and NMOS current source load (m_load) biased
+#   by vbias2.
+# Miller compensation capacitor (Cc) between output and stage 1 would
+# provide frequency compensation (not shown at transistor level).
+# Demonstrates: hierarchical design with subcell (DiffAmp),
+# multi-stage amplifier, internal nets for inter-stage connections,
+# section comments for layout organization.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell DiffAmp:
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input inp(.align=Orientation.West)
+        input inn(.align=Orientation.West)
+        input vbias(.align=Orientation.West)
+        output outp(.align=Orientation.East)
+        output outn(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power ports
+        port vdd(.pos=(1, 29); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Input ports — both on left side
+        port inp(.pos=(1, 12); .align=Orientation.East)
+        port inn(.pos=(1, 15); .align=Orientation.East)
+        port vbias(.pos=(1, 4); .align=Orientation.East)
+
+        # Output ports — both on right side
+        port outp(.pos=(24, 20); .align=Orientation.West)
+        port outn(.pos=(24, 23); .align=Orientation.West)
+
+        # Internal nets
+        net tail
+
+        # Tail current source
+        Nmos m_tail(.pos=(12, 2); .g -- vbias; .d -- tail; .s -- vss; .b -- vss)
+
+        # Input differential pair
+        Nmos m_inp(.pos=(6, 10); .g -- inp; .d -- outn; .s -- tail; .b -- vss)
+        Nmos m_inn(.pos=(18, 10); .g -- inn; .d -- outp; .s -- tail; .b -- vss)
+
+        # PMOS active load (current mirror)
+        Pmos m_p1(.pos=(6, 22); .g -- outn; .d -- outn; .s -- vdd; .b -- vdd)
+        Pmos m_p2(.pos=(18, 22); .g -- outn; .d -- outp; .s -- vdd; .b -- vdd)
+
+cell MillerOpamp:
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input inp(.align=Orientation.West)
+        input inn(.align=Orientation.West)
+        input vbias1(.align=Orientation.West)
+        input vbias2(.align=Orientation.West)
+        output vout(.align=Orientation.East)
+
+    viewgen schematic:
+        # ==================================================
+        # Layout optimized for signal flow left-to-right
+        # Stage1 (DiffAmp) symbol is 4x6 with pins:
+        #   inp/inn/vbias on left at y=2,3,4 relative
+        #   outn/outp on right at y=3,2 relative
+        #   vdd/vss at top/bottom center
+        # ==================================================
+
+        # Power rails - horizontal at top and bottom
+        port vdd(.pos=(1, 25); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Input ports - aligned with stage1 input pins
+        # stage1 at (5, 10) -> inp at (5, 12), inn at (5, 13), vbias at (5, 14)
+        port inp(.pos=(1, 12); .align=Orientation.East)
+        port inn(.pos=(1, 13); .align=Orientation.East)
+        port vbias1(.pos=(1, 14); .align=Orientation.East)
+
+        # Second stage bias - near bottom
+        port vbias2(.pos=(1, 5); .align=Orientation.East)
+
+        # Output port - aligned with second stage output
+        port vout(.pos=(28, 15); .align=Orientation.West)
+
+        # Internal nets
+        net stage1_outn
+        net stage1_outp
+
+        # ==================================================
+        # Stage 1: Differential amplifier (hierarchical)
+        # ==================================================
+        DiffAmp stage1:
+            .vdd -- vdd
+            .vss -- vss
+            .inp -- inp
+            .inn -- inn
+            .vbias -- vbias1
+            .outn -- stage1_outn
+            .outp -- stage1_outp
+            .pos = (4, 10)
+
+        # ==================================================
+        # Stage 2: Common-source gain stage
+        # Vertically stacked: PMOS on top, NMOS on bottom
+        # Output at drain connection between them
+        # ==================================================
+        # PMOS common-source amplifier (driven by stage1 outn)
+        Pmos m_cs(.pos=(20, 20); .g -- stage1_outn; .d -- vout; .s -- vdd; .b -- vdd)
+
+        # NMOS current source load (biased by vbias2)
+        Nmos m_load(.pos=(20, 8); .g -- vbias2; .d -- vout; .s -- vss; .b -- vss)
+
+        # Note: Miller compensation capacitor (Cc) would connect
+        # between vout and stage1_outn for frequency compensation.
+        # Capacitors not shown in this transistor-level schematic.

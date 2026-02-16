@@ -1,0 +1,116 @@
+# -*- version: ord2 -*-
+# N-bit binary-weighted current-steering DAC with differential outputs.
+# Parameterized version that uses for-loop to generate all bit cells.
+# Each bit i has: PMOS current source (m_src[i]) with width = w_unit * 2^i,
+# and differential switch pair (m_sw_p[i], m_sw_n[i]) steering current
+# to ioutp or ioutn based on d[i]/d_n[i].
+# Output current: Iout = Iunit * sum(d[i] * 2^i) for i=0..bits-1.
+# Uses route control (ref.route = False) on power, bias, and output
+# ports since they connect to many instances.
+# Demonstrates: parameterized for-loop generation, path arrays for
+# indexed instances (m_src[i], m_sw_p[i], m_sw_n[i]), computed binary
+# weighting (2**i), differential outputs, route control for complex nets.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell BinaryWeightedDAC:
+    """
+    N-bit binary-weighted current-steering DAC.
+
+    Each bit controls a current source weighted by 2^i.
+    Output current: Iout = Iunit * sum(d[i] * 2^i)
+
+    Parameters:
+        bits: Number of bits (resolution)
+        l: Channel length
+        w_unit: Unit current source width (LSB weight)
+        w_sw: Switch transistor width
+    """
+    bits = Parameter(int)
+    l = Parameter(R)
+    w_unit = Parameter(R)
+    w_sw = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        input vbias(.align=Orientation.West)
+        path d
+        path d_n
+        for i in range(self.bits):
+            input d[i](.align=Orientation.West)
+            input d_n[i](.align=Orientation.West)
+        output ioutp(.align=Orientation.East)
+        output ioutn(.align=Orientation.East)
+
+    viewgen schematic:
+        x_spacing = 14  # More spacing between bits
+        total_width = 4 + self.bits * x_spacing
+
+        # Power and bias
+        port vdd(.pos=(1, 26); .align=Orientation.East)
+        port vbias(.pos=(1, 22); .align=Orientation.East)
+
+        # Differential outputs - disable routing since they connect to many places
+        port ioutp(.pos=(1, 4); .align=Orientation.East)
+        port ioutn(.pos=(total_width, 4); .align=Orientation.West)
+        ioutp.ref.route = False
+        ioutn.ref.route = False
+
+        # Disable routing for power/bias rails too
+        vdd.ref.route = False
+        vbias.ref.route = False
+
+        # Data input paths
+        path d
+        path d_n
+        for i in range(self.bits):
+            x_pos = 4 + i * x_spacing
+            port d[i](.pos=(x_pos + 5, 1); .align=Orientation.North)
+            port d_n[i](.pos=(x_pos - 1, 1); .align=Orientation.North)
+
+        # Internal paths for cells
+        path m_src
+        path m_sw_p
+        path m_sw_n
+        path tail
+
+        # Instantiate binary-weighted cells
+        for i in range(self.bits):
+            # Weight = 2^i, achieved by scaling width
+            weight = 2 ** i
+            w_src_scaled = self.w_unit * weight
+
+            x_pos = 4 + i * x_spacing
+            net tail[i]
+
+            # Current source for this bit (binary weighted)
+            Pmos m_src[i]:
+                .g -- vbias
+                .d -- tail[i]
+                .s -- vdd
+                .b -- vdd
+                .pos = (x_pos + 3, 18)
+                .$l = self.l
+                .$w = w_src_scaled
+
+            # Switch to positive output
+            Pmos m_sw_p[i]:
+                .g -- d_n[i]
+                .d -- ioutp
+                .s -- tail[i]
+                .b -- vdd
+                .pos = (x_pos, 10)
+                .$l = self.l
+                .$w = self.w_sw
+
+            # Switch to negative output
+            Pmos m_sw_n[i]:
+                .g -- d[i]
+                .d -- ioutn
+                .s -- tail[i]
+                .b -- vdd
+                .pos = (x_pos + 6, 10)
+                .$l = self.l
+                .$w = self.w_sw

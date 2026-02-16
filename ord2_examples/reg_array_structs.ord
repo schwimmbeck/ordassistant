@@ -1,0 +1,26 @@
+# -*- version: ord2 -*-
+# Multi-bit register using the "Array of Structs" path pattern.
+# Each bit is a struct with named fields: bit[i].d (data input)
+# and bit[i].q (data output).
+# Pattern: path bit → path bit[i] → input bit[i].d / output bit[i].q
+# This groups related signals by bit index, making it natural to
+# access all signals for bit i together.
+# Demonstrates: Array of Structs path pattern, nested path indexing,
+# struct-style hierarchical port naming.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos,Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell MultibitReg_ArrayOfStructs:
+    bits = Parameter(int)
+    viewgen symbol:
+        input vdd(.align=Orientation.North)
+        input vss(.align=Orientation.South)
+        path bit
+        for i in range(self.bits):
+            path bit[i]
+            input bit[i].d(.align=Orientation.West)
+            output bit[i].q(.align=Orientation.East)
+        input clk(.align=Orientation.West)
+

@@ -1,0 +1,194 @@
+# -*- version: ord2 -*-
+# Capacitive DAC switching cells for SAR ADC.
+# Contains two cells:
+#   1. CapDacSwitch — single-bit switch that connects a capacitor's
+#      bottom plate (vbot) to either Vrefp or Vrefn based on the
+#      digital control bit. PMOS (sw_refp) connects to Vrefp when
+#      bit_n=0; NMOS (sw_refn) connects to Vrefn when bit_n=1.
+#   2. CapDacArray — N-bit binary-weighted capacitive DAC array.
+#      Instantiates switch pairs in a for-loop with a sample switch
+#      (sw_sample) that connects vin to vtop during sampling phase.
+#      Route control used extensively for shared nets.
+# Demonstrates: multiple cells in one file, single-bit switch cell,
+# parameterized array with for-loop, route control (ref.route = False),
+# path arrays for switch instances, complementary bit/bit_n control.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell CapDacSwitch:
+    """
+    Capacitive DAC switching cell for SAR ADC.
+
+    Switches the bottom plate of a capacitor between Vrefp and Vrefn
+    based on the digital control bit.
+
+    bit=1: bottom plate -> Vrefp
+    bit=0: bottom plate -> Vrefn
+
+    Parameters:
+        l: Channel length
+        w_sw: Switch transistor width
+    """
+    l = Parameter(R)
+    w_sw = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input vrefp(.align=Orientation.West)
+        input vrefn(.align=Orientation.West)
+        input bit(.align=Orientation.West)
+        input bit_n(.align=Orientation.West)
+        output vbot(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power
+        port vdd(.pos=(1, 24); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Reference voltages
+        port vrefp(.pos=(1, 20); .align=Orientation.East)
+        port vrefn(.pos=(1, 8); .align=Orientation.East)
+
+        # Control bits
+        port bit(.pos=(1, 14); .align=Orientation.East)
+        port bit_n(.pos=(14, 14); .align=Orientation.West)
+
+        # Output (bottom plate of capacitor)
+        port vbot(.pos=(20, 14); .align=Orientation.West)
+
+        # ==================================================
+        # Switch to Vrefp (when bit=1, bit_n=0)
+        # PMOS conducts when bit_n=0
+        # ==================================================
+        Pmos sw_refp:
+            .g -- bit_n
+            .d -- vbot
+            .s -- vrefp
+            .b -- vdd
+            .pos = (10, 18)
+            .$l = self.l
+            .$w = self.w_sw
+
+        # ==================================================
+        # Switch to Vrefn (when bit=0, bit_n=1)
+        # NMOS conducts when bit_n=1
+        # ==================================================
+        Nmos sw_refn:
+            .g -- bit_n
+            .d -- vbot
+            .s -- vrefn
+            .b -- vss
+            .pos = (10, 6)
+            .$l = self.l
+            .$w = self.w_sw
+
+
+cell CapDacArray:
+    """
+    Binary-weighted capacitive DAC array for SAR ADC.
+
+    Array of switched capacitors with binary weighting.
+    The top plates are all connected together (to comparator input).
+    Bottom plates are switched between Vrefp and Vrefn.
+
+    Parameters:
+        bits: Number of bits
+        l: Channel length
+        w_sw: Switch transistor width
+    """
+    bits = Parameter(int)
+    l = Parameter(R)
+    w_sw = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input vrefp(.align=Orientation.West)
+        input vrefn(.align=Orientation.West)
+        path bit
+        path bit_n
+        for i in range(self.bits):
+            input bit[i](.align=Orientation.West)
+            input bit_n[i](.align=Orientation.West)
+        output vtop(.align=Orientation.East)
+        input sample(.align=Orientation.West)
+        input vin(.align=Orientation.West)
+
+    viewgen schematic:
+        x_spacing = 12
+        total_width = 4 + self.bits * x_spacing
+
+        # Power rails
+        port vdd(.pos=(1, 34); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        vdd.ref.route = False
+        vss.ref.route = False
+
+        # Reference voltages
+        port vrefp(.pos=(1, 28); .align=Orientation.East)
+        port vrefn(.pos=(1, 8); .align=Orientation.East)
+        vrefp.ref.route = False
+        vrefn.ref.route = False
+
+        # Top plate output (to comparator)
+        port vtop(.pos=(total_width, 20); .align=Orientation.West)
+        vtop.ref.route = False
+
+        # Sample switch input
+        port sample(.pos=(1, 22); .align=Orientation.East)
+        port vin(.pos=(1, 16); .align=Orientation.East)
+
+        # Bit control inputs
+        path bit
+        path bit_n
+        for i in range(self.bits):
+            x_pos = 4 + i * x_spacing
+            port bit[i](.pos=(x_pos, 1); .align=Orientation.North)
+            port bit_n[i](.pos=(x_pos + 4, 1); .align=Orientation.North)
+
+        # Internal paths
+        path sw_refp
+        path sw_refn
+        path vbot
+
+        # Sample switch (connects vin to vtop during sampling)
+        Nmos sw_sample:
+            .g -- sample
+            .d -- vtop
+            .s -- vin
+            .b -- vss
+            .pos = (4, 18)
+            .$l = self.l
+            .$w = self.w_sw
+
+        # Instantiate switched capacitor cells
+        for i in range(self.bits):
+            x_pos = 10 + i * x_spacing
+            net vbot[i]
+
+            # Switch to Vrefp (PMOS)
+            Pmos sw_refp[i]:
+                .g -- bit_n[i]
+                .d -- vbot[i]
+                .s -- vrefp
+                .b -- vdd
+                .pos = (x_pos, 24)
+                .$l = self.l
+                .$w = self.w_sw
+
+            # Switch to Vrefn (NMOS)
+            Nmos sw_refn[i]:
+                .g -- bit_n[i]
+                .d -- vbot[i]
+                .s -- vrefn
+                .b -- vss
+                .pos = (x_pos, 6)
+                .$l = self.l
+                .$w = self.w_sw
+
+            # Note: The actual capacitor would connect vbot[i] to vtop
+            # Capacitors are not modeled here, just the switches
+            # In practice, MIM capacitors with binary weights would be used

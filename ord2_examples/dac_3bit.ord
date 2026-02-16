@@ -1,0 +1,90 @@
+# -*- version: ord2 -*-
+# 3-bit binary-weighted current-steering digital-to-analog converter (DAC).
+# Fixed 3-bit implementation with manually instantiated bit cells.
+# Each bit has a PMOS current source (m_src) and PMOS switch (m_sw).
+# Binary weighting: bit 0 (LSB) = 1x w_unit, bit 1 = 2x, bit 2 (MSB) = 4x.
+# Output current: Iout = Iunit * (4*d2 + 2*d1 + d0).
+# All current sources biased by vbias, switches controlled by digital
+# inputs d0, d1, d2.
+# Demonstrates: binary-weighted sizing (w_unit * weight), manual
+# bit-slice instantiation, current source + switch topology,
+# parameter setting outside context blocks.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell DAC3Bit:
+    """
+    3-bit binary-weighted current-steering DAC.
+
+    Simple fixed implementation for testing.
+    Output current = Iunit * (4*d2 + 2*d1 + d0)
+
+    Parameters:
+        l: Channel length
+        w_unit: Unit current source width (LSB)
+        w_sw: Switch transistor width
+    """
+    l = Parameter(R)
+    w_unit = Parameter(R)
+    w_sw = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        input vbias(.align=Orientation.West)
+        input d0(.align=Orientation.West)
+        input d1(.align=Orientation.West)
+        input d2(.align=Orientation.West)
+        output iout(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power and bias
+        port vdd(.pos=(1, 24); .align=Orientation.East)
+        port vbias(.pos=(1, 18); .align=Orientation.East)
+
+        # Digital inputs
+        port d0(.pos=(1, 6); .align=Orientation.East)
+        port d1(.pos=(1, 2); .align=Orientation.East)
+        port d2(.pos=(1, 9); .align=Orientation.East)
+
+        # Output
+        port iout(.pos=(26, 3); .align=Orientation.West)
+
+        # Internal nets
+        net tail0
+        net tail1
+        net tail2
+
+        # ==================================================
+        # Bit 0 (LSB): weight = 1x
+        # ==================================================
+        Pmos m_src0(.pos=(6, 16); .g -- vbias; .d -- tail0; .s -- vdd; .b -- vdd)
+        m_src0.$l = self.l
+        m_src0.$w = self.w_unit
+
+        Pmos m_sw0(.pos=(6, 4); .g -- d0; .d -- iout; .s -- tail0; .b -- vdd)
+        m_sw0.$l = self.l
+        m_sw0.$w = self.w_sw
+
+        # ==================================================
+        # Bit 1: weight = 2x
+        # ==================================================
+        Pmos m_src1(.pos=(14, 16); .g -- vbias; .d -- tail1; .s -- vdd; .b -- vdd)
+        m_src1.$l = self.l
+        m_src1.$w = self.w_unit * 2
+
+        Pmos m_sw1(.pos=(14, 4); .g -- d1; .d -- iout; .s -- tail1; .b -- vdd)
+        m_sw1.$l = self.l
+        m_sw1.$w = self.w_sw
+
+        # ==================================================
+        # Bit 2 (MSB): weight = 4x
+        # ==================================================
+        Pmos m_src2(.pos=(22, 16); .g -- vbias; .d -- tail2; .s -- vdd; .b -- vdd)
+        m_src2.$l = self.l
+        m_src2.$w = self.w_unit * 4
+
+        Pmos m_sw2(.pos=(22, 4); .g -- d2; .d -- iout; .s -- tail2; .b -- vdd)
+        m_sw2.$l = self.l
+        m_sw2.$w = self.w_sw

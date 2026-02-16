@@ -1,0 +1,93 @@
+# -*- version: ord2 -*-
+# 6-transistor SRAM memory cell with mirror-symmetric layout.
+# Topology:
+#   - Cross-coupled inverter pair stores one bit (nodes q, q_n)
+#   - Left inverter (mp1, mn1): default orientation, gates face West
+#   - Right inverter (mp2, mn2): FlippedSouth, gates face East
+#   - Access transistors (ma1, ma2) controlled by word line (wl)
+#     connect internal nodes to bit lines (bl, blb) for read/write
+#   - ma2 is FlippedSouth so gate faces East, matching right-side symmetry
+# The cross-coupling (q drives right gates, q_n drives left gates)
+# creates the characteristic X-shaped routing of SRAM cells.
+# Demonstrates: FlippedSouth on multiple transistor types (NMOS + PMOS),
+# cross-coupled pair with mirrored halves, 6T SRAM topology.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell SRAMCell:
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input wl(.align=Orientation.North)
+        inout bl(.align=Orientation.West)
+        inout blb(.align=Orientation.East)
+
+    viewgen schematic:
+        port vdd(.pos=(1, 24); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        vdd.ref.route = False
+        vss.ref.route = False
+        port wl(.pos=(1, 6); .align=Orientation.East)
+        port bl(.pos=(1, 0); .align=Orientation.East)
+        port blb(.pos=(20, 0); .align=Orientation.West)
+
+        net q
+        net q_n
+
+        # ==================================================
+        # Left inverter (default orientation — gates face West)
+        # Drives node q, controlled by q_n
+        # ==================================================
+        Pmos mp1:
+            .g -- q_n
+            .d -- q
+            .s -- vdd
+            .b -- vdd
+            .pos = (6, 18)
+
+        Nmos mn1:
+            .g -- q_n
+            .d -- q
+            .s -- vss
+            .b -- vss
+            .pos = (6, 10)
+
+        # ==================================================
+        # Right inverter (FlippedSouth — gates face East)
+        # Drives node q_n, controlled by q
+        # ==================================================
+        Pmos mp2:
+            .g -- q
+            .d -- q_n
+            .s -- vdd
+            .b -- vdd
+            .pos = (16, 18)
+            .orientation = Orientation.FlippedSouth
+
+        Nmos mn2:
+            .g -- q
+            .d -- q_n
+            .s -- vss
+            .b -- vss
+            .pos = (16, 10)
+            .orientation = Orientation.FlippedSouth
+
+        # ==================================================
+        # Access transistors (word-line controlled)
+        # ==================================================
+        Nmos ma1:
+            .g -- wl
+            .d -- q
+            .s -- bl
+            .b -- vss
+            .pos = (4, 2)
+
+        Nmos ma2:
+            .g -- wl
+            .d -- q_n
+            .s -- blb
+            .b -- vss
+            .pos = (18, 2)
+            .orientation = Orientation.FlippedSouth

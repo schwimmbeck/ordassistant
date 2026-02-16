@@ -1,0 +1,78 @@
+# -*- version: ord2 -*-
+# NMOS differential amplifier with PMOS active load using FlippedSouth
+# orientation for mirror-symmetric layout.
+# Right-side transistors (m_inn, m_p2) are mirrored along the Y axis
+# so their gates face outward — inp enters from the left, inn from the
+# right, creating the center-symmetric schematic typical of analog layout.
+# Compare with diff_amp.ord which uses default orientation on all devices.
+# Demonstrates: .orientation = Orientation.FlippedSouth for symmetric
+# differential pair, gate pins facing opposite directions, mirror-image
+# active load.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell DiffAmpFlipped:
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input inp(.align=Orientation.West)
+        input inn(.align=Orientation.East)
+        input vbias(.align=Orientation.West)
+        output outp(.align=Orientation.East)
+        output outn(.align=Orientation.West)
+
+    viewgen schematic:
+        port vdd(.pos=(1, 23); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Inputs on opposite sides for symmetric routing
+        port inp(.pos=(1, 12); .align=Orientation.East)
+        port inn(.pos=(18, 12); .align=Orientation.West)
+        port vbias(.pos=(1, 4); .align=Orientation.East)
+
+        # Outputs on opposite sides
+        port outn(.pos=(1, 20); .align=Orientation.East)
+        port outp(.pos=(18, 17); .align=Orientation.West)
+
+        net tail
+
+        # Tail current source (center, default orientation)
+        Nmos m_tail(.pos=(9, 2); .g -- vbias; .d -- tail; .s -- vss; .b -- vss)
+
+        # Input differential pair
+        # m_inp: default — gate faces West (left), connects to inp
+        Nmos m_inp:
+            .g -- inp
+            .d -- outn
+            .s -- tail
+            .b -- vss
+            .pos = (6, 10)
+
+        # m_inn: FlippedSouth — gate faces East (right), connects to inn
+        Nmos m_inn:
+            .g -- inn
+            .d -- outp
+            .s -- tail
+            .b -- vss
+            .pos = (16, 10)
+            .orientation = Orientation.FlippedSouth
+
+        # PMOS active load (current mirror)
+        # m_p1: default — gate faces West
+        Pmos m_p1:
+            .g -- outn
+            .d -- outn
+            .s -- vdd
+            .b -- vdd
+            .pos = (6, 18)
+
+        # m_p2: FlippedSouth — gate faces East, mirrors m_p1
+        Pmos m_p2:
+            .g -- outn
+            .d -- outp
+            .s -- vdd
+            .b -- vdd
+            .pos = (16, 18)
+            .orientation = Orientation.FlippedSouth

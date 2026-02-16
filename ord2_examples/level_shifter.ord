@@ -1,0 +1,91 @@
+# -*- version: ord2 -*-
+# Cross-coupled PMOS level shifter with mirror-symmetric layout.
+# Converts a low-voltage differential signal to a high-voltage domain.
+# Topology:
+#   - NMOS pull-down pair (mn1, mn2): driven by vin and vin_n
+#     mn2 is FlippedSouth so its gate faces East (right)
+#   - Cross-coupled PMOS pair (mp1, mp2): positive feedback for
+#     rail-to-rail output swing. mp2 is FlippedSouth.
+#     mp1 gate driven by vout (right side), mp2 gate driven by
+#     vout_n (left side) — creates the cross-coupling
+# Operation: when vin=high, mn1 pulls vout_n low, which turns on
+# mp2, pulling vout high. Positive feedback latches the state.
+# Demonstrates: FlippedSouth for symmetric cross-coupled circuits,
+# differential input/output on opposite sides, level shifter topology.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell LevelShifter:
+    l = Parameter(R)
+    wn = Parameter(R)
+    wp = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input vin(.align=Orientation.West)
+        input vin_n(.align=Orientation.East)
+        output vout(.align=Orientation.East)
+        output vout_n(.align=Orientation.West)
+
+    viewgen schematic:
+        port vdd(.pos=(1, 20); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Differential inputs on opposite sides
+        port vin(.pos=(1, 6); .align=Orientation.East)
+        port vin_n(.pos=(22, 6); .align=Orientation.West)
+
+        # Differential outputs on opposite sides
+        port vout_n(.pos=(1, 14); .align=Orientation.East)
+        port vout(.pos=(22, 14); .align=Orientation.West)
+
+        # ==================================================
+        # NMOS pull-down pair
+        # ==================================================
+        # mn1: default — gate faces West, driven by vin
+        Nmos mn1:
+            .g -- vin
+            .d -- vout_n
+            .s -- vss
+            .b -- vss
+            .pos = (6, 2)
+            .$l = self.l
+            .$w = self.wn
+
+        # mn2: FlippedSouth — gate faces East, driven by vin_n
+        Nmos mn2:
+            .g -- vin_n
+            .d -- vout
+            .s -- vss
+            .b -- vss
+            .pos = (16, 2)
+            .orientation = Orientation.FlippedSouth
+            .$l = self.l
+            .$w = self.wn
+
+        # ==================================================
+        # Cross-coupled PMOS pull-up pair
+        # ==================================================
+        # mp1: default — gate faces West, driven by vout (cross-coupled)
+        Pmos mp1:
+            .g -- vout
+            .d -- vout_n
+            .s -- vdd
+            .b -- vdd
+            .pos = (6, 12)
+            .$l = self.l
+            .$w = self.wp
+
+        # mp2: FlippedSouth — gate faces East, driven by vout_n (cross-coupled)
+        Pmos mp2:
+            .g -- vout_n
+            .d -- vout
+            .s -- vdd
+            .b -- vdd
+            .pos = (16, 12)
+            .orientation = Orientation.FlippedSouth
+            .$l = self.l
+            .$w = self.wp

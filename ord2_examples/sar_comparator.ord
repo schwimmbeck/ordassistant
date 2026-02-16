@@ -1,0 +1,119 @@
+# -*- version: ord2 -*-
+# Dynamic comparator optimized for SAR ADC applications.
+# Two-stage architecture:
+#   Stage 1 (Preamplifier): NMOS diff pair (m_inp, m_inn) with
+#     clock-controlled tail source (m_tail). Active during track (clk=1).
+#   Stage 2 (Regenerative latch): cross-coupled NMOS (m_xn1, m_xn2)
+#     and PMOS (m_xp1, m_xp2) for fast regeneration. Reset PMOS
+#     (m_rst1, m_rst2) precharge outputs when clk=0.
+# Operation: clk=0 resets; clk=1 activates preamplifier and latches.
+# Separate sizing for input (w_input), latch (w_latch), and tail (w_tail).
+# Demonstrates: two-stage comparator, parameter setting outside context
+# block (m_tail.$l = self.l), cross-coupled pairs, inline + block
+# instantiation mix, precharge reset transistors.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell SARComparator:
+    """
+    Dynamic comparator optimized for SAR ADC.
+
+    Two-stage design:
+    1. Preamplifier: provides gain during track phase
+    2. Regenerative latch: makes decision during latch phase
+
+    Parameters:
+        l: Channel length
+        w_input: Input pair width (sets gm and input capacitance)
+        w_latch: Latch transistor width (sets regeneration speed)
+        w_tail: Tail current source width
+
+    Operation:
+        - clk=0: Track mode, preamp active, latch reset
+        - clk=1: Latch mode, preamp off, regeneration
+    """
+    l = Parameter(R)
+    w_input = Parameter(R)
+    w_latch = Parameter(R)
+    w_tail = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input vinp(.align=Orientation.West)
+        input vinn(.align=Orientation.West)
+        input clk(.align=Orientation.West)
+        output outp(.align=Orientation.East)
+        output outn(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power rails
+        port vdd(.pos=(1, 40); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        vss.ref.route = False
+        vdd.ref.route = False
+
+        # Inputs — both on left
+        port vinp(.pos=(1, 12); .align=Orientation.East)
+        port vinn(.pos=(1, 15); .align=Orientation.East)
+        port clk(.pos=(1, 4); .align=Orientation.East)
+
+        # Outputs — both on right
+        port outp(.pos=(28, 24); .align=Orientation.West)
+        port outn(.pos=(28, 27); .align=Orientation.West)
+
+        # Internal nets
+        net tail
+        net preamp_p
+        net preamp_n
+
+        # ==================================================
+        # Stage 1: Preamplifier (active during track)
+        # ==================================================
+
+        # Tail current source (controlled by clk)
+        Nmos m_tail(.pos=(14, 2); .g -- clk; .d -- tail; .s -- vss; .b -- vss)
+        m_tail.$l = self.l
+        m_tail.$w = self.w_tail
+
+        # Input differential pair
+        Nmos m_inp(.pos=(8, 8); .g -- vinp; .d -- preamp_p; .s -- tail; .b -- vss)
+        m_inp.$l = self.l
+        m_inp.$w = self.w_input
+
+        Nmos m_inn(.pos=(20, 8); .g -- vinn; .d -- preamp_n; .s -- tail; .b -- vss)
+        m_inn.$l = self.l
+        m_inn.$w = self.w_input
+
+        # ==================================================
+        # Stage 2: Regenerative latch (cross-coupled)
+        # ==================================================
+
+        # Cross-coupled NMOS
+        Nmos m_xn1(.pos=(8, 16); .g -- outn; .d -- outp; .s -- preamp_p; .b -- vss)
+        m_xn1.$l = self.l
+        m_xn1.$w = self.w_latch
+
+        Nmos m_xn2(.pos=(20, 16); .g -- outp; .d -- outn; .s -- preamp_n; .b -- vss)
+        m_xn2.$l = self.l
+        m_xn2.$w = self.w_latch
+
+        # Cross-coupled PMOS
+        Pmos m_xp1(.pos=(8, 26); .g -- outn; .d -- outp; .s -- vdd; .b -- vdd)
+        m_xp1.$l = self.l
+        m_xp1.$w = self.w_latch
+
+        Pmos m_xp2(.pos=(20, 26); .g -- outp; .d -- outn; .s -- vdd; .b -- vdd)
+        m_xp2.$l = self.l
+        m_xp2.$w = self.w_latch
+
+        # Reset PMOS (precharge latch outputs when clk=0)
+        Pmos m_rst1(.pos=(8, 34); .g -- clk; .d -- outp; .s -- vdd; .b -- vdd)
+        m_rst1.$l = self.l
+        m_rst1.$w = self.w_latch
+
+        Pmos m_rst2(.pos=(20, 34); .g -- clk; .d -- outn; .s -- vdd; .b -- vdd)
+        m_rst2.$l = self.l
+        m_rst2.$w = self.w_latch

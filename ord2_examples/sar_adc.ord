@@ -1,0 +1,459 @@
+# -*- version: ord2 -*-
+# N-bit Successive Approximation Register (SAR) ADC — complete system.
+# This is the most complex example, integrating multiple subcells:
+#   - Sample switch (sw_sample): NMOS switch connecting vin to comparator
+#   - CapDacSwitch array (sw[i]): N capacitive DAC switches for
+#     binary-weighted charge redistribution
+#   - Tie transistors (tie[i]): connect cap bottom plates to comparator
+#   - SARComparator (comp): dynamic comparator for voltage comparison
+#   - DFFSimple register (dff[i]): N flip-flops storing conversion bits
+#   - Output buffers (buf_n[i], buf_p[i]): inverter pairs driving outputs
+# SAR algorithm: samples input, then iteratively determines each bit
+# from MSB to LSB using binary search with the capacitive DAC.
+# Demonstrates: large-scale hierarchical design, multiple imported
+# subcells, extensive path arrays, computed positions, route control
+# on many nets, mixed analog/digital system, parametric sizing.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell CapDacSwitch:
+    """
+    Capacitive DAC switching cell for SAR ADC.
+
+    Switches the bottom plate of a capacitor between Vrefp and Vrefn
+    based on the digital control bit.
+
+    bit=1: bottom plate -> Vrefp
+    bit=0: bottom plate -> Vrefn
+
+    Parameters:
+        l: Channel length
+        w_sw: Switch transistor width
+    """
+    l = Parameter(R)
+    w_sw = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input vrefp(.align=Orientation.West)
+        input vrefn(.align=Orientation.West)
+        input bit(.align=Orientation.West)
+        input bit_n(.align=Orientation.West)
+        output vbot(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power
+        port vdd(.pos=(1, 24); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Reference voltages
+        port vrefp(.pos=(1, 20); .align=Orientation.East)
+        port vrefn(.pos=(1, 8); .align=Orientation.East)
+
+        # Control bits
+        port bit(.pos=(1, 14); .align=Orientation.East)
+        port bit_n(.pos=(14, 14); .align=Orientation.West)
+
+        # Output (bottom plate of capacitor)
+        port vbot(.pos=(20, 14); .align=Orientation.West)
+
+        # ==================================================
+        # Switch to Vrefp (when bit=1, bit_n=0)
+        # PMOS conducts when bit_n=0
+        # ==================================================
+        Pmos sw_refp:
+            .g -- bit_n
+            .d -- vbot
+            .s -- vrefp
+            .b -- vdd
+            .pos = (10, 18)
+            .$l = self.l
+            .$w = self.w_sw
+
+        # ==================================================
+        # Switch to Vrefn (when bit=0, bit_n=1)
+        # NMOS conducts when bit_n=1
+        # ==================================================
+        Nmos sw_refn:
+            .g -- bit_n
+            .d -- vbot
+            .s -- vrefn
+            .b -- vss
+            .pos = (10, 6)
+            .$l = self.l
+            .$w = self.w_sw
+
+cell DFFSimple:
+    """
+    Simple D flip-flop for SAR register.
+
+    Master-slave configuration using pass-gate latches.
+
+    Parameters:
+        l: Channel length
+        w: Transistor width
+    """
+    l = Parameter(R)
+    w = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input d(.align=Orientation.West)
+        input clk(.align=Orientation.West)
+        output q(.align=Orientation.East)
+        output q_n(.align=Orientation.East)
+
+    viewgen schematic:
+        port vdd(.pos=(1, 20); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        port d(.pos=(1, 12); .align=Orientation.East)
+        port clk(.pos=(1, 6); .align=Orientation.East)
+        port q(.pos=(42, 14); .align=Orientation.West)
+        port q_n(.pos=(42, 10); .align=Orientation.West)
+
+        vdd.ref.route = False
+        vss.ref.route = False
+
+        # Internal nets
+        net clk_n
+        net master_out
+        net slave_in
+
+        # ==================================================
+        # Clock inverter
+        # ==================================================
+        Nmos nclk(.pos=(6, 4); .g -- clk; .d -- clk_n; .s -- vss; .b -- vss)
+        nclk.$l = self.l
+        nclk.$w = self.w
+
+        Pmos pclk(.pos=(6, 14); .g -- clk; .d -- clk_n; .s -- vdd; .b -- vdd)
+        pclk.$l = self.l
+        pclk.$w = self.w
+
+        # ==================================================
+        # Master latch (transparent when clk=0)
+        # Pass gate controlled by clk_n (NMOS) and clk (PMOS)
+        # ==================================================
+        Nmos nm_pass(.pos=(14, 10); .g -- clk_n; .d -- master_out; .s -- d; .b -- vss)
+        nm_pass.$l = self.l
+        nm_pass.$w = self.w
+
+        Pmos pm_pass(.pos=(14, 14); .g -- clk; .d -- master_out; .s -- d; .b -- vdd)
+        pm_pass.$l = self.l
+        pm_pass.$w = self.w
+
+        # Master inverter (feedback)
+        Nmos nm_inv(.pos=(22, 4); .g -- master_out; .d -- slave_in; .s -- vss; .b -- vss)
+        nm_inv.$l = self.l
+        nm_inv.$w = self.w
+
+        Pmos pm_inv(.pos=(22, 14); .g -- master_out; .d -- slave_in; .s -- vdd; .b -- vdd)
+        pm_inv.$l = self.l
+        pm_inv.$w = self.w
+
+        # ==================================================
+        # Slave latch (transparent when clk=1)
+        # Pass gate controlled by clk (NMOS) and clk_n (PMOS)
+        # ==================================================
+        Nmos ns_pass(.pos=(30, 10); .g -- clk; .d -- q_n; .s -- slave_in; .b -- vss)
+        ns_pass.$l = self.l
+        ns_pass.$w = self.w
+
+        Pmos ps_pass(.pos=(30, 14); .g -- clk_n; .d -- q_n; .s -- slave_in; .b -- vdd)
+        ps_pass.$l = self.l
+        ps_pass.$w = self.w
+
+        # Output inverter
+        Nmos ns_inv(.pos=(38, 4); .g -- q_n; .d -- q; .s -- vss; .b -- vss)
+        ns_inv.$l = self.l
+        ns_inv.$w = self.w
+
+        Pmos ps_inv(.pos=(38, 14); .g -- q_n; .d -- q; .s -- vdd; .b -- vdd)
+        ps_inv.$l = self.l
+        ps_inv.$w = self.w
+
+cell SARComparator:
+    """
+    Dynamic comparator optimized for SAR ADC.
+
+    Two-stage design:
+    1. Preamplifier: provides gain during track phase
+    2. Regenerative latch: makes decision during latch phase
+
+    Parameters:
+        l: Channel length
+        w_input: Input pair width (sets gm and input capacitance)
+        w_latch: Latch transistor width (sets regeneration speed)
+        w_tail: Tail current source width
+
+    Operation:
+        - clk=0: Track mode, preamp active, latch reset
+        - clk=1: Latch mode, preamp off, regeneration
+    """
+    l = Parameter(R)
+    w_input = Parameter(R)
+    w_latch = Parameter(R)
+    w_tail = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input vinp(.align=Orientation.West)
+        input vinn(.align=Orientation.West)
+        input clk(.align=Orientation.West)
+        output outp(.align=Orientation.East)
+        output outn(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power rails
+        port vdd(.pos=(1, 40); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        vss.ref.route = False
+        vdd.ref.route = False
+
+        # Inputs — both on left
+        port vinp(.pos=(1, 12); .align=Orientation.East)
+        port vinn(.pos=(1, 15); .align=Orientation.East)
+        port clk(.pos=(1, 4); .align=Orientation.East)
+
+        # Outputs — both on right
+        port outp(.pos=(28, 24); .align=Orientation.West)
+        port outn(.pos=(28, 27); .align=Orientation.West)
+
+        # Internal nets
+        net tail
+        net preamp_p
+        net preamp_n
+
+        # ==================================================
+        # Stage 1: Preamplifier (active during track)
+        # ==================================================
+
+        # Tail current source (controlled by clk)
+        Nmos m_tail(.pos=(14, 2); .g -- clk; .d -- tail; .s -- vss; .b -- vss)
+        m_tail.$l = self.l
+        m_tail.$w = self.w_tail
+
+        # Input differential pair
+        Nmos m_inp(.pos=(8, 8); .g -- vinp; .d -- preamp_p; .s -- tail; .b -- vss)
+        m_inp.$l = self.l
+        m_inp.$w = self.w_input
+
+        Nmos m_inn(.pos=(20, 8); .g -- vinn; .d -- preamp_n; .s -- tail; .b -- vss)
+        m_inn.$l = self.l
+        m_inn.$w = self.w_input
+
+        # ==================================================
+        # Stage 2: Regenerative latch (cross-coupled)
+        # ==================================================
+
+        # Cross-coupled NMOS
+        Nmos m_xn1(.pos=(8, 16); .g -- outn; .d -- outp; .s -- preamp_p; .b -- vss)
+        m_xn1.$l = self.l
+        m_xn1.$w = self.w_latch
+
+        Nmos m_xn2(.pos=(20, 16); .g -- outp; .d -- outn; .s -- preamp_n; .b -- vss)
+        m_xn2.$l = self.l
+        m_xn2.$w = self.w_latch
+
+        # Cross-coupled PMOS
+        Pmos m_xp1(.pos=(8, 26); .g -- outn; .d -- outp; .s -- vdd; .b -- vdd)
+        m_xp1.$l = self.l
+        m_xp1.$w = self.w_latch
+
+        Pmos m_xp2(.pos=(20, 26); .g -- outp; .d -- outn; .s -- vdd; .b -- vdd)
+        m_xp2.$l = self.l
+        m_xp2.$w = self.w_latch
+
+        # Reset PMOS (precharge latch outputs when clk=0)
+        Pmos m_rst1(.pos=(8, 34); .g -- clk; .d -- outp; .s -- vdd; .b -- vdd)
+        m_rst1.$l = self.l
+        m_rst1.$w = self.w_latch
+
+        Pmos m_rst2(.pos=(20, 34); .g -- clk; .d -- outn; .s -- vdd; .b -- vdd)
+        m_rst2.$l = self.l
+        m_rst2.$w = self.w_latch
+
+
+cell SARADC:
+    """
+    N-bit Successive Approximation Register (SAR) ADC.
+
+    Architecture:
+    - N capacitive DAC switches
+    - Dynamic comparator
+    - N D flip-flops for SAR register
+
+    Parameters:
+        bits: ADC resolution (number of bits)
+        l: Channel length
+        w_comp: Comparator transistor width
+        w_sw: Switch transistor width
+        w_logic: Logic transistor width
+    """
+    bits = Parameter(int)
+    l = Parameter(R)
+    w_comp = Parameter(R)
+    w_sw = Parameter(R)
+    w_logic = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input vin(.align=Orientation.West)
+        input vrefp(.align=Orientation.West)
+        input vrefn(.align=Orientation.West)
+        input clk(.align=Orientation.West)
+        input sample(.align=Orientation.West)
+        path dout
+        for i in range(self.bits):
+            output dout[i](.align=Orientation.East)
+
+    viewgen schematic:
+        # Layout spacing
+        sw_spacing = 16  # Spacing between DAC switches
+        dff_spacing = 20  # Vertical spacing between DFFs
+
+        # ==================================================
+        # Ports
+        # ==================================================
+        port vdd(.pos=(1, 80); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        vdd.ref.route = False
+        vss.ref.route = False
+
+        port vin(.pos=(1, 30); .align=Orientation.East)
+        port vrefp(.pos=(1, 60); .align=Orientation.East)
+        port vrefn(.pos=(1, 20); .align=Orientation.East)
+        port clk(.pos=(1, 10); .align=Orientation.East)
+        port sample(.pos=(1, 40); .align=Orientation.East)
+        #vrefp.ref.route = False
+        #vrefn.ref.route = False
+        #clk.ref.route = False
+
+        # Output ports - positioned near the DFF outputs
+        path dout
+        for i in range(self.bits):
+            port dout[i](.pos=(self.bits * sw_spacing + 40, 15 + i * dff_spacing); .align=Orientation.West)
+            #dout[i].ref.route = False
+
+        # ==================================================
+        # Internal nets
+        # ==================================================
+        net comp_inp
+        net comp_out
+        net comp_out_n
+        comp_inp.route = False
+        comp_out.route = False
+        comp_out_n.route = False
+
+        # Bit control nets
+        path bit, bit_n, vbot
+        for i in range(self.bits):
+            net bit[i]
+            net bit_n[i]
+            net vbot[i]
+            bit[i].route = False
+            bit_n[i].route = False
+            vbot[i].route = False
+
+        # ==================================================
+        # Sample switch
+        # ==================================================
+        Nmos sw_sample:
+            .g -- sample
+            .d -- comp_inp
+            .s -- vin
+            .b -- vss
+            .pos = (8, 30)
+            .$l = self.l
+            .$w = self.w_sw
+
+        # ==================================================
+        # Capacitive DAC Switches
+        # ==================================================
+        path sw, tie
+        for i in range(self.bits):
+            CapDacSwitch sw[i]:
+                .vdd -- vdd
+                .vss -- vss
+                .vrefp -- vrefp
+                .vrefn -- vrefn
+                .bit -- bit[i]
+                .bit_n -- bit_n[i]
+                .vbot -- vbot[i]
+                .pos = (10 + i * sw_spacing, 50)
+                .$l = self.l
+                .$w_sw = self.w_sw
+
+            # Tie cap bottom plates to comparator input
+            Nmos tie[i]:
+                .g -- vdd
+                .d -- comp_inp
+                .s -- vbot[i]
+                .b -- vss
+                .pos = (14 + i * sw_spacing, 40)
+                .$l = self.l
+                .$w = self.w_sw
+
+        # ==================================================
+        # SAR Comparator
+        # ==================================================
+        comp_x = self.bits * sw_spacing + 15
+        SARComparator comp:
+            .vdd -- vdd
+            .vss -- vss
+            .vinp -- comp_inp
+            .vinn -- vrefn
+            .clk -- clk
+            .outp -- comp_out
+            .outn -- comp_out_n
+            .pos = (comp_x, 10)
+            .$l = self.l
+            .$w_input = self.w_comp
+            .$w_latch = self.w_comp
+            .$w_tail = self.w_comp * 2
+
+        # ==================================================
+        # SAR Register (DFFs) with output buffers
+        # ==================================================
+        path dff
+        dff_x = self.bits * sw_spacing + 5
+        for i in range(self.bits):
+            DFFSimple dff[i]:
+                .vdd -- vdd
+                .vss -- vss
+                .d -- comp_out
+                .clk -- clk
+                .q -- bit[i]
+                .q_n -- bit_n[i]
+                .pos = (dff_x, 4 + i * dff_spacing)
+                .$l = self.l
+                .$w = self.w_logic
+
+        # Output buffers (inverters) - connect bit[i] to dout[i]
+        path buf_n, buf_p
+        for i in range(self.bits):
+            buf_x = self.bits * sw_spacing + 25
+
+            Nmos buf_n[i]:
+                .g -- bit[i]
+                .d -- dout[i]
+                .s -- vss
+                .b -- vss
+                .pos = (buf_x, 8 + i * dff_spacing)
+                .$l = self.l
+                .$w = self.w_logic
+
+            Pmos buf_p[i]:
+                .g -- bit[i]
+                .d -- dout[i]
+                .s -- vdd
+                .b -- vdd
+                .pos = (buf_x, 16 + i * dff_spacing)
+                .$l = self.l
+                .$w = self.w_logic * 2

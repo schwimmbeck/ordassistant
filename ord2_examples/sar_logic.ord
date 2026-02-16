@@ -1,0 +1,174 @@
+# -*- version: ord2 -*-
+# SAR ADC digital logic: D flip-flop and N-bit SAR register.
+# Contains two cells:
+#   1. DFFSimple — master-slave D flip-flop built from pass-gate latches.
+#      Clock inverter generates clk_n. Master latch (transparent when
+#      clk=0) uses pass gates (nm_pass, pm_pass) and feedback inverter.
+#      Slave latch (transparent when clk=1) captures master output.
+#      Outputs both q and q_n (complementary).
+#   2. SARRegister — N-bit register using DFFSimple subcells in a
+#      for-loop. Each DFF stores one bit of the SAR conversion result.
+#      Uses path arrays (dout, dout_n, dff) and route control for
+#      power/clock rails.
+# Demonstrates: transistor-level flip-flop design, pass-gate latches,
+# parameter setting outside context blocks, hierarchical subcell
+# arrays (DFFSimple dff[i]), computed positions, route control,
+# multiple cells in one file.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell DFFSimple:
+    """
+    Simple D flip-flop for SAR register.
+
+    Master-slave configuration using pass-gate latches.
+
+    Parameters:
+        l: Channel length
+        w: Transistor width
+    """
+    l = Parameter(R)
+    w = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input d(.align=Orientation.West)
+        input clk(.align=Orientation.West)
+        output q(.align=Orientation.East)
+        output q_n(.align=Orientation.East)
+
+    viewgen schematic:
+        port vdd(.pos=(1, 20); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        port d(.pos=(1, 12); .align=Orientation.East)
+        port clk(.pos=(1, 6); .align=Orientation.East)
+        port q(.pos=(42, 14); .align=Orientation.West)
+        port q_n(.pos=(42, 10); .align=Orientation.West)
+
+        vdd.ref.route = False
+        vss.ref.route = False
+
+        # Internal nets
+        net clk_n
+        net master_out
+        net slave_in
+
+        # ==================================================
+        # Clock inverter
+        # ==================================================
+        Nmos nclk(.pos=(6, 4); .g -- clk; .d -- clk_n; .s -- vss; .b -- vss)
+        nclk.$l = self.l
+        nclk.$w = self.w
+
+        Pmos pclk(.pos=(6, 14); .g -- clk; .d -- clk_n; .s -- vdd; .b -- vdd)
+        pclk.$l = self.l
+        pclk.$w = self.w
+
+        # ==================================================
+        # Master latch (transparent when clk=0)
+        # Pass gate controlled by clk_n (NMOS) and clk (PMOS)
+        # ==================================================
+        Nmos nm_pass(.pos=(14, 10); .g -- clk_n; .d -- master_out; .s -- d; .b -- vss)
+        nm_pass.$l = self.l
+        nm_pass.$w = self.w
+
+        Pmos pm_pass(.pos=(14, 14); .g -- clk; .d -- master_out; .s -- d; .b -- vdd)
+        pm_pass.$l = self.l
+        pm_pass.$w = self.w
+
+        # Master inverter (feedback)
+        Nmos nm_inv(.pos=(22, 4); .g -- master_out; .d -- slave_in; .s -- vss; .b -- vss)
+        nm_inv.$l = self.l
+        nm_inv.$w = self.w
+
+        Pmos pm_inv(.pos=(22, 14); .g -- master_out; .d -- slave_in; .s -- vdd; .b -- vdd)
+        pm_inv.$l = self.l
+        pm_inv.$w = self.w
+
+        # ==================================================
+        # Slave latch (transparent when clk=1)
+        # Pass gate controlled by clk (NMOS) and clk_n (PMOS)
+        # ==================================================
+        Nmos ns_pass(.pos=(30, 10); .g -- clk; .d -- q_n; .s -- slave_in; .b -- vss)
+        ns_pass.$l = self.l
+        ns_pass.$w = self.w
+
+        Pmos ps_pass(.pos=(30, 14); .g -- clk_n; .d -- q_n; .s -- slave_in; .b -- vdd)
+        ps_pass.$l = self.l
+        ps_pass.$w = self.w
+
+        # Output inverter
+        Nmos ns_inv(.pos=(38, 4); .g -- q_n; .d -- q; .s -- vss; .b -- vss)
+        ns_inv.$l = self.l
+        ns_inv.$w = self.w
+
+        Pmos ps_inv(.pos=(38, 14); .g -- q_n; .d -- q; .s -- vdd; .b -- vdd)
+        ps_inv.$l = self.l
+        ps_inv.$w = self.w
+
+
+cell SARRegister:
+    """
+    N-bit SAR register.
+
+    Stores the conversion result and provides bits to the capacitive DAC.
+
+    Parameters:
+        bits: Number of bits
+        l: Channel length
+        w: Transistor width
+    """
+    bits = Parameter(int)
+    l = Parameter(R)
+    w = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input din(.align=Orientation.West)
+        input clk(.align=Orientation.West)
+        input load(.align=Orientation.West)
+        path dout
+        path dout_n
+        for i in range(self.bits):
+            output dout[i](.align=Orientation.East)
+            output dout_n[i](.align=Orientation.East)
+
+    viewgen schematic:
+        y_spacing = 10
+        total_height = 4 + self.bits * y_spacing
+
+        port vdd(.pos=(1, total_height); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        port din(.pos=(1, total_height - 6); .align=Orientation.East)
+        port clk(.pos=(1, 6); .align=Orientation.East)
+        port load(.pos=(1, 10); .align=Orientation.East)
+
+        vdd.ref.route = False
+        vss.ref.route = False
+        clk.ref.route = False
+
+        # Output paths
+        path dout
+        path dout_n
+        path dff
+
+        for i in range(self.bits):
+            y_pos = 4 + i * y_spacing
+            port dout[i](.pos=(20, y_pos + 2); .align=Orientation.West)
+            port dout_n[i](.pos=(20, y_pos + 3); .align=Orientation.West)
+
+            # For simplicity, each DFF gets din (in real SAR, would be shift register)
+            DFFSimple dff[i]:
+                .vdd -- vdd
+                .vss -- vss
+                .d -- din
+                .clk -- clk
+                .q -- dout[i]
+                .q_n -- dout_n[i]
+                .pos = (6, y_pos)
+                .$l = self.l
+                .$w = self.w

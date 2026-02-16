@@ -1,0 +1,105 @@
+# -*- version: ord2 -*-
+# Bottom-plate sampling sample-and-hold circuit for ADC front-ends.
+# Uses the bottom-plate sampling technique to reduce charge injection:
+#   1. Sample phase: both top and bottom switches closed, capacitor
+#      tracks input voltage
+#   2. Hold phase: bottom switch (sample_early) opens first, then
+#      top switch (sample) opens — minimizes signal-dependent
+#      charge injection onto the held voltage
+# Components:
+#   - Top-plate transmission gate (mn_top, mp_top): main sampling switch
+#   - Bottom-plate NMOS switch (mn_bot): opens first during hold
+#   - Output buffer PMOS (mp_buf): isolates held voltage
+# Demonstrates: complementary clock signals (sample/sample_n,
+# sample_early/sample_early_n), analog switch pairs, bottom-plate
+# sampling technique, multiple clock domains.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell SampleAndHold:
+    """
+    Bottom-plate sampling sample-and-hold circuit.
+
+    Uses bottom-plate sampling technique to reduce charge injection:
+    1. Sample phase: both switches closed
+    2. Hold phase: bottom switch opens first, then top switch
+
+    Parameters:
+        l: Channel length
+        wn: NMOS width for switches
+        wp: PMOS width for switches
+    """
+    l = Parameter(R)
+    wn = Parameter(R)
+    wp = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input vin(.align=Orientation.West)
+        output vout(.align=Orientation.East)
+        input sample(.align=Orientation.West)
+        input sample_n(.align=Orientation.West)
+        input sample_early(.align=Orientation.West)
+        input sample_early_n(.align=Orientation.West)
+        inout vhold(.align=Orientation.South)
+
+    viewgen schematic:
+        # Power rails
+        port vdd(.pos=(1, 24); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Signal ports
+        port vin(.pos=(1, 16); .align=Orientation.East)
+        port vout(.pos=(31, 11); .align=Orientation.West)
+        port vhold(.pos=(17, 1); .align=Orientation.North)
+
+        # Clock ports (sample_early opens before sample for bottom-plate sampling)
+        port sample(.pos=(1, 14); .align=Orientation.East)
+        port sample_n(.pos=(1, 20); .align=Orientation.East)
+        port sample_early(.pos=(1, 6); .align=Orientation.East)
+        port sample_early_n(.pos=(1, 10); .align=Orientation.East)
+
+        # Top-plate switch (main sampling switch)
+        # Opens second during hold transition
+        # vhold serves as the sampling capacitor node (connected externally)
+        Nmos mn_top:
+            .g -- sample
+            .d -- vhold
+            .s -- vin
+            .b -- vss
+            .pos = (10, 12)
+            .$l = self.l
+            .$w = self.wn
+
+        Pmos mp_top:
+            .g -- sample_n
+            .d -- vhold
+            .s -- vin
+            .b -- vdd
+            .pos = (10, 18)
+            .$l = self.l
+            .$w = self.wp
+
+        # Bottom-plate switch (to ground reference)
+        # Opens first during hold transition to minimize charge injection
+        Nmos mn_bot:
+            .g -- sample_early
+            .d -- vhold
+            .s -- vss
+            .b -- vss
+            .pos = (18, 4)
+            .$l = self.l
+            .$w = self.wn
+
+        # Output is directly connected to hold node
+        Pmos mp_buf:
+            .g -- sample_early_n
+            .d -- vout
+            .s -- vhold
+            .b -- vdd
+            .pos = (26, 12)
+            .$l = self.l
+            .$w = self.wp

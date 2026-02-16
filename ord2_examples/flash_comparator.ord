@@ -1,0 +1,153 @@
+# -*- version: ord2 -*-
+# Flash ADC comparator stage with integrated reference voltage generation.
+# Combines a resistor divider tap with a StrongArm latch comparator.
+# Reference generation: two NMOS pseudo-resistors (r_upper, r_lower)
+# form a voltage divider between vref_top and vref_bot, creating
+# vref_tap at the midpoint.
+# Comparison: StrongArm latch (subcell) compares vin against
+# vref_tap on each clock edge. Output dout is the digital decision.
+# Multiple stages can be chained (vref_bot → next stage's vref_top)
+# to form a flash ADC reference ladder.
+# Demonstrates: subcell (StrongarmLatch), pseudo-resistor
+# voltage divider, route control on power rails, hierarchical design,
+# mixed analog (divider) and digital (latch) blocks.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell StrongarmLatch:
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input inp(.align=Orientation.West)
+        input inn(.align=Orientation.West)
+        input clk(.align=Orientation.West)
+        output outp(.align=Orientation.East)
+        output outn(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power ports
+        port vdd(.pos=(1, 40); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        vdd.ref.route = False
+        vss.ref.route = False
+
+        # Input ports — both on left
+        port inp(.pos=(1, 10); .align=Orientation.East)
+        port inn(.pos=(1, 15); .align=Orientation.East)
+        port clk(.pos=(1, 4); .align=Orientation.East)
+
+        # Output ports — both on right
+        port outp(.pos=(28, 24); .align=Orientation.West)
+        port outn(.pos=(28, 27); .align=Orientation.West)
+
+        # Internal nets
+        net tail
+        net intp
+        net intn
+
+        # Tail transistor (clock-controlled)
+        Nmos m_tail(.pos=(14, 2); .g -- clk; .d -- tail; .s -- vss; .b -- vss)
+
+        # Input differential pair
+        Nmos m_inp(.pos=(8, 8); .g -- inp; .d -- intp; .s -- tail; .b -- vss)
+        Nmos m_inn(.pos=(20, 8); .g -- inn; .d -- intn; .s -- tail; .b -- vss)
+
+        # Cross-coupled NMOS (regeneration)
+        Nmos m_xn1(.pos=(8, 16); .g -- outn; .d -- outp; .s -- intp; .b -- vss)
+        Nmos m_xn2(.pos=(20, 16); .g -- outp; .d -- outn; .s -- intn; .b -- vss)
+
+        # Cross-coupled PMOS (regeneration)
+        Pmos m_xp1(.pos=(8, 26); .g -- outn; .d -- outp; .s -- vdd; .b -- vdd)
+        Pmos m_xp2(.pos=(20, 26); .g -- outp; .d -- outn; .s -- vdd; .b -- vdd)
+
+        # Precharge PMOS (reset when clk low)
+        Pmos m_pre1(.pos=(8, 34); .g -- clk; .d -- outp; .s -- vdd; .b -- vdd)
+        Pmos m_pre2(.pos=(20, 34); .g -- clk; .d -- outn; .s -- vdd; .b -- vdd)
+
+cell FlashComparatorStage:
+    """
+    Single comparator stage for flash ADC with reference generation.
+
+    Includes:
+    - Resistor divider tap (NMOS pseudo-resistors)
+    - StrongArm latch comparator
+
+    Parameters:
+        l: Channel length
+        w_comp: Comparator transistor width
+        w_res: Pseudo-resistor width
+    """
+    l = Parameter(R)
+    w_comp = Parameter(R)
+    w_res = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input vin(.align=Orientation.West)
+        input vref_top(.align=Orientation.West)
+        output vref_bot(.align=Orientation.East)
+        input clk(.align=Orientation.West)
+        output dout(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power
+        port vdd(.pos=(1, 21); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Disable routing for power rails
+        vdd.ref.route = False
+        vss.ref.route = False
+
+        # Reference ladder connections
+        port vref_top(.pos=(1, 15); .align=Orientation.East)
+        port vref_bot(.pos=(14, 6); .align=Orientation.West)
+
+        # Input and clock
+        port vin(.pos=(1, 20); .align=Orientation.East)
+        port clk(.pos=(1, 16); .align=Orientation.East)
+
+        # Digital output
+        port dout(.pos=(22, 8); .align=Orientation.West)
+
+        # Internal nets
+        net vref_tap
+        net dout_n  # Complementary output (unused but must be connected)
+
+        # ==================================================
+        # Resistor divider (pseudo-resistors)
+        # ==================================================
+        # Upper resistor
+        Nmos r_upper:
+            .g -- vref_top
+            .d -- vref_top
+            .s -- vref_tap
+            .b -- vss
+            .pos = (6, 10)
+            .$l = self.l
+            .$w = self.w_res
+
+        # Lower resistor
+        Nmos r_lower:
+            .g -- vref_top
+            .d -- vref_tap
+            .s -- vref_bot
+            .b -- vss
+            .pos = (6, 2)
+            .$l = self.l
+            .$w = self.w_res
+
+        # ==================================================
+        # StrongArm Latch Comparator
+        # ==================================================
+        StrongarmLatch comp:
+            .vdd -- vdd
+            .vss -- vss
+            .inp -- vin
+            .inn -- vref_tap
+            .clk -- clk
+            .outp -- dout
+            .outn -- dout_n
+            .pos = (16, 6)

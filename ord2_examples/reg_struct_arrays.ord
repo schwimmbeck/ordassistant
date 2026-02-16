@@ -1,0 +1,27 @@
+# -*- version: ord2 -*-
+# Multi-bit register using the "Struct of Arrays" path pattern.
+# Signal buses are organized by type: bit.d[0..N] for all data inputs,
+# bit.q[0..N] for all data outputs.
+# Pattern: path bit → path bit.d → path bit.q → input bit.d[i] / output bit.q[i]
+# This groups signals by function, making it easy to access all
+# data inputs or all outputs as a bus.
+# Demonstrates: Struct of Arrays path pattern, named sub-paths with
+# indexed elements, alternative to Array of Structs organization.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos,Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell MultibitReg_StructOfArrays:
+    bits = Parameter(int)
+    viewgen symbol:
+        input vdd(.align=Orientation.North)
+        input vss(.align=Orientation.South)
+        path bit
+        path bit.d
+        path bit.q
+        for i in range(self.bits):
+            input bit.d[i](.align=Orientation.West)
+            output bit.q[i](.align=Orientation.East)
+        input clk(.align=Orientation.West)
+

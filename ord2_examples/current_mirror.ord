@@ -1,0 +1,140 @@
+# -*- version: ord2 -*-
+# PMOS current mirrors for analog bias generation.
+# Contains two cells:
+#   1. SimpleMirror — basic 2-transistor PMOS current mirror with
+#      configurable ratio. Reference transistor is diode-connected
+#      (gate tied to drain). Output transistor mirrors the current
+#      scaled by ratio (W_out = ratio * w_unit).
+#   2. CascodeMirror — wide-swing cascode current mirror for higher
+#      output impedance. Adds cascode transistors biased by vbias
+#      on both reference and output sides.
+# Demonstrates: Parameter(int) and Parameter(R), self.<param> access,
+# .$l and .$w parameter setting, multiple cells in one file,
+# diode-connected transistors, cascode topology, section comments.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell SimpleMirror:
+    """
+    Simple PMOS current mirror with configurable ratio and sizing.
+
+    Parameters:
+        ratio: Current mirror ratio (Iout = ratio * Iref)
+        l: Channel length for all transistors (for matching)
+        w_unit: Unit transistor width
+
+    The output uses a single transistor with W = ratio * w_unit.
+    """
+    ratio = Parameter(int)
+    l = Parameter(R)
+    w_unit = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        input iref(.align=Orientation.West)
+        output iout(.align=Orientation.East)
+
+    viewgen schematic:
+        # Ports
+        port vdd(.pos=(1, 16); .align=Orientation.East)
+        port iref(.pos=(1, 6); .align=Orientation.East)
+        port iout(.pos=(22, 6); .align=Orientation.West)
+
+        # Reference transistor (diode-connected: gate tied to drain via iref)
+        Pmos m_ref:
+            .g -- iref
+            .d -- iref
+            .s -- vdd
+            .b -- vdd
+            .pos = (6, 10)
+            .$l = self.l
+            .$w = self.w_unit
+
+        # Output transistor (ratio * w_unit, gate mirrors reference)
+        Pmos m_out:
+            .g -- iref
+            .d -- iout
+            .s -- vdd
+            .b -- vdd
+            .pos = (16, 10)
+            .$l = self.l
+            .$w = self.w_unit * self.ratio
+
+
+cell CascodeMirror:
+    """
+    Wide-swing cascode current mirror with configurable ratio.
+
+    Parameters:
+        ratio: Current mirror ratio (Iout = ratio * Iref)
+        l: Channel length for all transistors (for matching)
+        w_unit: Unit transistor width
+    """
+    ratio = Parameter(int)
+    l = Parameter(R)
+    w_unit = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        input iref(.align=Orientation.West)
+        output iout(.align=Orientation.East)
+        input vbias(.align=Orientation.West)
+
+    viewgen schematic:
+        # Ports
+        port vdd(.pos=(1, 24); .align=Orientation.East)
+        port iref(.pos=(1, 6); .align=Orientation.East)
+        port vbias(.pos=(1, 14); .align=Orientation.East)
+        port iout(.pos=(24, 10); .align=Orientation.West)
+
+        # Internal nets
+        net ref_mid
+        net out_mid
+
+        # ==================================================
+        # Reference side (1x width)
+        # ==================================================
+        # Reference input transistor (diode-connected via iref)
+        Pmos m_ref:
+            .g -- iref
+            .d -- ref_mid
+            .s -- vdd
+            .b -- vdd
+            .pos = (6, 18)
+            .$l = self.l
+            .$w = self.w_unit
+
+        # Reference cascode transistor
+        Pmos m_ref_casc:
+            .g -- vbias
+            .d -- iref
+            .s -- ref_mid
+            .b -- vdd
+            .pos = (6, 10)
+            .$l = self.l
+            .$w = self.w_unit
+
+        # ==================================================
+        # Output side (ratio * w_unit)
+        # ==================================================
+        # Output transistor (gate mirrors reference)
+        Pmos m_out:
+            .g -- iref
+            .d -- out_mid
+            .s -- vdd
+            .b -- vdd
+            .pos = (18, 18)
+            .$l = self.l
+            .$w = self.w_unit * self.ratio
+
+        # Output cascode transistor
+        Pmos m_out_casc:
+            .g -- vbias
+            .d -- iout
+            .s -- out_mid
+            .b -- vdd
+            .pos = (18, 10)
+            .$l = self.l
+            .$w = self.w_unit * self.ratio

@@ -1,0 +1,81 @@
+# -*- version: ord2 -*-
+# Single-bit current steering DAC cell with differential outputs.
+# A PMOS current source (m_src) biased by vbias feeds a differential
+# switch pair (m_sw_p, m_sw_n) that steers the current to either
+# outp or outn based on the digital select signal.
+# When sel=1 (sel_n=0): m_sw_p conducts, current flows to outp.
+# When sel=0 (sel_n=1): m_sw_n conducts, current flows to outn.
+# This is the basic building block for current-steering DACs.
+# Demonstrates: differential switch pair, current source biasing,
+# complementary control signals, parametric transistor sizing.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell CurrentSteeringCell:
+    """
+    Single-bit current steering DAC cell with differential outputs.
+
+    When sel=1: current flows to outp
+    When sel=0: current flows to outn
+
+    Parameters:
+        l: Channel length for all transistors
+        w_sw: Switch transistor width
+        w_src: Current source transistor width
+    """
+    l = Parameter(R)
+    w_sw = Parameter(R)
+    w_src = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        input vbias(.align=Orientation.West)
+        input sel(.align=Orientation.West)
+        input sel_n(.align=Orientation.West)
+        output outp(.align=Orientation.East)
+        output outn(.align=Orientation.East)
+
+    viewgen schematic:
+        # Ports
+        port vdd(.pos=(1, 22); .align=Orientation.East)
+        port vbias(.pos=(1, 16); .align=Orientation.East)
+        port sel(.pos=(1, 12); .align=Orientation.East)
+        port sel_n(.pos=(1, 6); .align=Orientation.East)
+        port outp(.pos=(20, 1); .align=Orientation.West)
+        port outn(.pos=(20, 2); .align=Orientation.West)
+
+        # Internal net
+        net tail
+
+        # PMOS current source (biased by vbias)
+        Pmos m_src:
+            .g -- vbias
+            .d -- tail
+            .s -- vdd
+            .b -- vdd
+            .pos = (10, 14)
+            .$l = self.l
+            .$w = self.w_src
+
+        # Differential switch pair
+        # When sel=1, sel_n=0: left switch ON, current to outp
+        Pmos m_sw_p:
+            .g -- sel_n
+            .d -- outp
+            .s -- tail
+            .b -- vdd
+            .pos = (4, 4)
+            .$l = self.l
+            .$w = self.w_sw
+
+        # When sel=0, sel_n=1: right switch ON, current to outn
+        Pmos m_sw_n:
+            .g -- sel
+            .d -- outn
+            .s -- tail
+            .b -- vdd
+            .pos = (14, 4)
+            .$l = self.l
+            .$w = self.w_sw

@@ -1,0 +1,210 @@
+# -*- version: ord2 -*-
+# Inverter chain, buffer driver, and ring oscillator examples.
+# Contains three cells demonstrating hierarchical reuse and parameterization:
+#   1. SizedInverter — basic inverter with configurable PMOS/NMOS widths,
+#      used as a building block by the other cells.
+#   2. InverterChain — parameterized chain of N inverters with progressive
+#      sizing (each stage scaled by fanout ratio). Used as a buffer/driver
+#      to drive increasing capacitive loads.
+#   3. RingOscillator — odd number of inverters connected in a ring for
+#      oscillation. Last output feeds back to first input.
+# Demonstrates: hierarchical subcell instantiation (SizedInverter as
+# subcell), for-loop with computed sizing (fanout^i), path arrays,
+# intermediate nets, conditional input/output routing, ring feedback,
+# multiple cells in one file.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell SizedInverter:
+    """
+    Basic inverter with configurable PMOS/NMOS sizing.
+
+    Parameters:
+        wp: PMOS width
+        wn: NMOS width
+        l: Channel length (shared)
+    """
+    wp = Parameter(R)
+    wn = Parameter(R)
+    l = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input a(.align=Orientation.West)
+        output y(.align=Orientation.East)
+
+    viewgen schematic:
+        port vdd(.pos=(1, 16); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        port a(.pos=(1, 8); .align=Orientation.East)
+        port y(.pos=(14, 8); .align=Orientation.West)
+
+        Nmos mn:
+            .g -- a
+            .d -- y
+            .s -- vss
+            .b -- vss
+            .pos = (6, 2)
+            .$l = self.l
+            .$w = self.wn
+
+        Pmos mp:
+            .g -- a
+            .d -- y
+            .s -- vdd
+            .b -- vdd
+            .pos = (6, 10)
+            .$l = self.l
+            .$w = self.wp
+
+
+cell InverterChain:
+    """
+    Parameterized inverter chain with progressive sizing.
+
+    Used as a buffer/driver where each stage is larger than the previous
+    to drive increasing capacitive loads.
+
+    Parameters:
+        stages: Number of inverter stages (must be >= 1)
+        fanout: Sizing ratio between consecutive stages
+        wn_unit: NMOS width of first stage
+        wp_unit: PMOS width of first stage
+        l: Channel length for all transistors
+
+    Sizing: Stage i has width = unit_width * fanout^i
+    """
+    stages = Parameter(int)
+    fanout = Parameter(R)
+    wn_unit = Parameter(R)
+    wp_unit = Parameter(R)
+    l = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input a(.align=Orientation.West)
+        output y(.align=Orientation.East)
+
+    viewgen schematic:
+        # Calculate total width needed
+        x_spacing = 8
+        total_width = 4 + self.stages * x_spacing
+
+        # Power rails
+        port vdd(.pos=(1, 20); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Input/output
+        port a(.pos=(1, 10); .align=Orientation.East)
+        port y(.pos=(total_width, 10); .align=Orientation.West)
+
+        # Declare path for inverter array
+        path inv
+        path stage_out
+
+        # Create intermediate nets (one less than stages)
+        for i in range(self.stages - 1):
+            net stage_out[i]
+
+        # Instantiate inverters with progressive sizing
+        for i in range(self.stages):
+            # Calculate sizing for this stage: unit * fanout^i
+            scale = self.fanout ** i
+            wn_stage = self.wn_unit * scale
+            wp_stage = self.wp_unit * scale
+
+            x_pos = 4 + i * x_spacing
+
+            # Determine input connection
+            if i == 0:
+                in_net = a
+            else:
+                in_net = stage_out[i - 1]
+
+            # Determine output connection
+            if i == self.stages - 1:
+                out_net = y
+            else:
+                out_net = stage_out[i]
+
+            # Instantiate sized inverter
+            SizedInverter inv[i]:
+                .vdd -- vdd
+                .vss -- vss
+                .a -- in_net
+                .y -- out_net
+                .pos = (x_pos, 6)
+                .$wp = wp_stage
+                .$wn = wn_stage
+                .$l = self.l
+
+
+cell RingOscillator:
+    """
+    Ring oscillator with configurable number of stages.
+
+    Parameters:
+        stages: Number of inverter stages (must be odd for oscillation)
+        w: Transistor width (PMOS = 2*w, NMOS = w)
+        l: Channel length
+
+    Note: stages must be odd for the circuit to oscillate!
+    """
+    stages = Parameter(int)
+    w = Parameter(R)
+    l = Parameter(R)
+
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        output osc_out(.align=Orientation.East)
+
+    viewgen schematic:
+        x_spacing = 8
+        total_width = 4 + self.stages * x_spacing
+
+        # Power rails
+        port vdd(.pos=(1, 20); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Output (tapped from last stage, which feeds back to first)
+        port osc_out(.pos=(total_width, 10); .align=Orientation.West)
+
+        # Declare paths
+        path inv
+        path node
+
+        # Create internal nodes for intermediate stages
+        # node[i] connects output of stage i to input of stage i+1
+        for i in range(self.stages - 1):
+            net node[i]
+
+        # Instantiate inverters in a ring
+        for i in range(self.stages):
+            x_pos = 4 + i * x_spacing
+
+            # Determine input connection
+            if i == 0:
+                in_net = osc_out  # Feedback: output of last stage
+            else:
+                in_net = node[i - 1]
+
+            # Determine output connection
+            if i == self.stages - 1:
+                out_net = osc_out  # Last stage outputs to osc_out (and feedback)
+            else:
+                out_net = node[i]
+
+            SizedInverter inv[i]:
+                .vdd -- vdd
+                .vss -- vss
+                .a -- in_net
+                .y -- out_net
+                .pos = (x_pos, 6)
+                .$wp = self.w * 2  # PMOS 2x for balanced rise/fall
+                .$wn = self.w
+                .$l = self.l

@@ -1,0 +1,85 @@
+# -*- version: ord2 -*-
+# Parameterized N-bit register using DFF flip-flop subcells.
+# Contains two cells:
+#   1. DFF — simple D flip-flop using pass-gate master-slave latches.
+#      Clock inverter generates clk_n. Master latch (transparent when
+#      clk=0) feeds a slave latch (transparent when clk=1).
+#   2. MultibitReg_Arrays — N-bit register instantiating DFF subcells
+#      in a for-loop, each with independent data input d[i] and output q[i].
+# Uses path arrays (path d, path q, path I) and indexed instantiation
+# (DFF I[i]) to create the parameterized array.
+# Position is set outside the context block: I[i].pos = (6, 3 + 8*i).
+# Demonstrates: pass-gate latch DFF, path declaration, indexed subcell
+# arrays, for-loop instantiation, setting .pos outside context block,
+# multiple cells in one file.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell DFF:
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input d(.align=Orientation.West)
+        input clk(.align=Orientation.West)
+        output q(.align=Orientation.East)
+
+    viewgen schematic:
+        port vdd(.pos=(1, 18); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        vss.ref.route = False
+        vdd.ref.route = False
+        port d(.pos=(1, 10); .align=Orientation.East)
+        port clk(.pos=(1, 4); .align=Orientation.East)
+        port q(.pos=(34, 10); .align=Orientation.West)
+
+        net clk_n
+        net master_out
+        net slave_in
+
+        # Clock inverter
+        Nmos nclk(.pos=(6, 2); .g -- clk; .d -- clk_n; .s -- vss; .b -- vss)
+        Pmos pclk(.pos=(6, 12); .g -- clk; .d -- clk_n; .s -- vdd; .b -- vdd)
+
+        # Master pass gate (transparent when clk=0)
+        Nmos nm_pass(.pos=(14, 5); .g -- clk_n; .d -- master_out; .s -- d; .b -- vss)
+        Pmos pm_pass(.pos=(14, 12); .g -- clk; .d -- master_out; .s -- d; .b -- vdd)
+
+        # Master-to-slave inverter
+        Nmos nm_inv(.pos=(22, 2); .g -- master_out; .d -- slave_in; .s -- vss; .b -- vss)
+        Pmos pm_inv(.pos=(22, 12); .g -- master_out; .d -- slave_in; .s -- vdd; .b -- vdd)
+
+        # Slave pass gate (transparent when clk=1)
+        Nmos ns_pass(.pos=(30, 5); .g -- clk; .d -- q; .s -- slave_in; .b -- vss)
+        Pmos ps_pass(.pos=(30, 12); .g -- clk_n; .d -- q; .s -- slave_in; .b -- vdd)
+
+cell MultibitReg_Arrays:
+    bits = Parameter(int)
+    viewgen symbol:
+        input vdd(.align=Orientation.North)
+        input vss(.align=Orientation.South)
+        path d
+        path q
+        for i in range(self.bits):
+            input d[i](.align=Orientation.West)
+            output q[i](.align=Orientation.East)
+        input clk(.align=Orientation.West)
+
+    viewgen schematic:
+        port vss(.pos=(1,1); .align=Orientation.East)
+        port vdd(.pos=(1,3); .align=Orientation.East)
+        port clk(.pos=(1,5); .align=Orientation.East)
+        path d
+        path q
+        path I
+        for i in range(self.bits):
+            port d[i](.pos=(4, 5 + 8 * i); .align=Orientation.East)
+            port q[i](.pos=(14, 5 + 8 * i); .align=Orientation.West)
+            DFF I[i]:
+                .vss -- vss
+                .vdd -- vdd
+                .clk -- clk
+                .d -- d[i]
+                .q -- q[i]
+            I[i].pos = (6, 3 + 8 * i)

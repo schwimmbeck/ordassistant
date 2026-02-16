@@ -1,0 +1,67 @@
+# -*- version: ord2 -*-
+# StrongArm dynamic latch comparator for high-speed decision making.
+# Topology (bottom to top):
+#   - Tail NMOS (m_tail): clocked current source, active when clk=1
+#   - NMOS input pair (m_inp, m_inn): differential voltage sensing
+#   - Cross-coupled NMOS (m_xn1, m_xn2): positive feedback regeneration
+#   - Cross-coupled PMOS (m_xp1, m_xp2): positive feedback regeneration
+#   - Precharge PMOS (m_pre1, m_pre2): reset outputs to vdd when clk=0
+# Operation: clk=0 resets outputs high; clk=1 enables regeneration,
+# outputs resolve to complementary logic levels based on input difference.
+# Used in: ADCs, SerDes receivers, clock/data recovery circuits.
+# Demonstrates: cross-coupled transistor pairs, clocked circuits,
+# differential inputs/outputs, precharge logic, inline instantiation.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell StrongarmLatch:
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input inp(.align=Orientation.West)
+        input inn(.align=Orientation.West)
+        input clk(.align=Orientation.West)
+        output outp(.align=Orientation.East)
+        output outn(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power ports
+        port vdd(.pos=(1, 40); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        vdd.ref.route = False
+        vss.ref.route = False
+
+        # Input ports — both on left
+        port inp(.pos=(1, 10); .align=Orientation.East)
+        port inn(.pos=(1, 15); .align=Orientation.East)
+        port clk(.pos=(1, 4); .align=Orientation.East)
+
+        # Output ports — both on right
+        port outp(.pos=(28, 24); .align=Orientation.West)
+        port outn(.pos=(28, 27); .align=Orientation.West)
+
+        # Internal nets
+        net tail
+        net intp
+        net intn
+
+        # Tail transistor (clock-controlled)
+        Nmos m_tail(.pos=(14, 2); .g -- clk; .d -- tail; .s -- vss; .b -- vss)
+
+        # Input differential pair
+        Nmos m_inp(.pos=(8, 8); .g -- inp; .d -- intp; .s -- tail; .b -- vss)
+        Nmos m_inn(.pos=(20, 8); .g -- inn; .d -- intn; .s -- tail; .b -- vss)
+
+        # Cross-coupled NMOS (regeneration)
+        Nmos m_xn1(.pos=(8, 16); .g -- outn; .d -- outp; .s -- intp; .b -- vss)
+        Nmos m_xn2(.pos=(20, 16); .g -- outp; .d -- outn; .s -- intn; .b -- vss)
+
+        # Cross-coupled PMOS (regeneration)
+        Pmos m_xp1(.pos=(8, 26); .g -- outn; .d -- outp; .s -- vdd; .b -- vdd)
+        Pmos m_xp2(.pos=(20, 26); .g -- outp; .d -- outn; .s -- vdd; .b -- vdd)
+
+        # Precharge PMOS (reset when clk low)
+        Pmos m_pre1(.pos=(8, 34); .g -- clk; .d -- outp; .s -- vdd; .b -- vdd)
+        Pmos m_pre2(.pos=(20, 34); .g -- clk; .d -- outn; .s -- vdd; .b -- vdd)

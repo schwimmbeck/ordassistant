@@ -1,0 +1,53 @@
+# -*- version: ord2 -*-
+# NMOS differential amplifier with PMOS active load (current mirror).
+# This is a fundamental analog building block used in op-amps and comparators.
+# Topology:
+#   - NMOS tail current source (m_tail) biased by vbias
+#   - NMOS differential input pair (m_inp, m_inn) sensing inp vs inn
+#   - PMOS diode-connected current mirror load (m_p1, m_p2) providing
+#     active load and single-ended to differential conversion
+# Differential outputs: outp and outn.
+# Demonstrates: analog circuit topology, tail current source, active load,
+# differential pair, multiple internal nets.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell DiffAmp:
+    viewgen symbol:
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+        input inp(.align=Orientation.West)
+        input inn(.align=Orientation.West)
+        input vbias(.align=Orientation.West)
+        output outp(.align=Orientation.East)
+        output outn(.align=Orientation.East)
+
+    viewgen schematic:
+        # Power ports
+        port vdd(.pos=(1, 29); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+
+        # Input ports — both on left side
+        port inp(.pos=(1, 12); .align=Orientation.East)
+        port inn(.pos=(1, 15); .align=Orientation.East)
+        port vbias(.pos=(1, 4); .align=Orientation.East)
+
+        # Output ports — both on right side
+        port outp(.pos=(24, 20); .align=Orientation.West)
+        port outn(.pos=(24, 23); .align=Orientation.West)
+
+        # Internal nets
+        net tail
+
+        # Tail current source
+        Nmos m_tail(.pos=(12, 2); .g -- vbias; .d -- tail; .s -- vss; .b -- vss)
+
+        # Input differential pair
+        Nmos m_inp(.pos=(6, 10); .g -- inp; .d -- outn; .s -- tail; .b -- vss)
+        Nmos m_inn(.pos=(18, 10); .g -- inn; .d -- outp; .s -- tail; .b -- vss)
+
+        # PMOS active load (current mirror)
+        Pmos m_p1(.pos=(6, 22); .g -- outn; .d -- outn; .s -- vdd; .b -- vdd)
+        Pmos m_p2(.pos=(18, 22); .g -- outn; .d -- outp; .s -- vdd; .b -- vdd)

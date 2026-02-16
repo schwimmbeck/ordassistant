@@ -1,0 +1,35 @@
+# -*- version: ord2 -*-
+# 2-input CMOS NAND gate.
+# Two NMOS transistors in series (n1, n2) pull output low only when both
+# inputs a and b are high. Two PMOS transistors in parallel (p1, p2)
+# pull output high when either input is low.
+# Uses a net (net_conn) to connect the series NMOS drain/source nodes.
+# Demonstrates: inline instantiation syntax, net declaration, basic
+# logic gate topology.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos,Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell Nand:
+    viewgen symbol:
+        output y(.align=Orientation.East)
+        input a(.align=Orientation.West)
+        input b(.align=Orientation.West)
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+
+    viewgen schematic:
+        port vdd(.pos=(1, 21); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        port a(.pos=(1, 4); .align=Orientation.East)
+        port b(.pos=(1, 12); .align=Orientation.East)
+        port y(.pos=(20, 10); .align=Orientation.West)
+
+        net net_conn
+
+        Nmos n1(.pos=(6, 2); .d -- net_conn; .s -- vss; .b -- vss; .g -- a)
+        Nmos n2(.pos=(6, 8); .d -- y; .s -- net_conn; .b -- vss; .g -- b)
+        Pmos p1(.pos=(4, 16); .d -- y; .s -- vdd; .b -- vdd; .g -- a)
+        Pmos p2(.pos=(12, 16); .d -- y; .s -- vdd; .b -- vdd; .g -- b)
+

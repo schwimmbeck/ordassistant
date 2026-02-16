@@ -1,0 +1,105 @@
+# -*- version: ord2 -*-
+# CMOS Schmitt trigger inverter with hysteresis for noise-immune switching.
+# Topology: standard inverter (n_main, p_main) plus feedback transistors
+# (n_fb, p_fb) that shift the switching threshold based on output state.
+# When output is high, n_fb is ON and raises the internal node, increasing
+# the high-to-low threshold (VIH). When output is low, p_fb lowers the
+# internal node, decreasing the low-to-high threshold (VIL).
+# Hysteresis = VIH - VIL, controlled by w_feedback relative to w_main.
+# Used for: debouncing noisy digital signals, clock conditioning,
+# level detection with noise immunity.
+# Demonstrates: positive feedback topology, internal nets (n_int, p_int),
+# separate main and feedback transistor sizing, section dividers.
+from ordec.core import *
+from ordec.schematic import helpers
+from ordec.lib.generic_mos import Nmos, Pmos
+from ordec.ord2.context import ctx, OrdContext
+
+cell SchmittTrigger:
+    """
+    CMOS Schmitt Trigger inverter with hysteresis.
+
+    Provides noise immunity through hysteresis in the transfer
+    characteristic. The switching thresholds are different for
+    rising and falling inputs.
+
+    Parameters:
+        l: Channel length
+        w_main: Width of main inverter transistors
+        w_feedback: Width of feedback transistors (controls hysteresis)
+
+    Topology:
+        Standard inverter with positive feedback transistors
+        that shift the switching threshold based on output state.
+
+    Hysteresis:
+        - VIH (high threshold): triggered when output is low
+        - VIL (low threshold): triggered when output is high
+        - Hysteresis = VIH - VIL
+    """
+    l = Parameter(R)
+    w_main = Parameter(R)
+    w_feedback = Parameter(R)
+
+    viewgen symbol:
+        input vin(.align=Orientation.West)
+        output vout(.align=Orientation.East)
+        inout vdd(.align=Orientation.North)
+        inout vss(.align=Orientation.South)
+
+    viewgen schematic:
+        port vdd(.pos=(1, 26); .align=Orientation.East)
+        port vss(.pos=(1, 1); .align=Orientation.East)
+        port vin(.pos=(1, 12); .align=Orientation.East)
+        port vout(.pos=(20, 12); .align=Orientation.West)
+
+        net n_int
+        net p_int
+
+        # ==================================================
+        # Main inverter
+        # ==================================================
+        # Main NMOS (pulls output low)
+        Nmos n_main:
+            .g -- vin
+            .d -- n_int
+            .s -- vss
+            .b -- vss
+            .pos = (8, 2)
+            .$l = self.l
+            .$w = self.w_main
+
+        # Main PMOS (pulls output high)
+        Pmos p_main:
+            .g -- vin
+            .d -- p_int
+            .s -- vdd
+            .b -- vdd
+            .pos = (8, 20)
+            .$l = self.l
+            .$w = self.w_main
+
+        # ==================================================
+        # Feedback transistors (create hysteresis)
+        # ==================================================
+        # NMOS feedback: when output is high, this transistor
+        # is ON and raises the internal node, increasing VIH
+        Nmos n_fb:
+            .g -- vout
+            .d -- vout
+            .s -- n_int
+            .b -- vss
+            .pos = (8, 8)
+            .$l = self.l
+            .$w = self.w_feedback
+
+        # PMOS feedback: when output is low, this transistor
+        # is ON and lowers the internal node, decreasing VIL
+        Pmos p_fb:
+            .g -- vout
+            .d -- vout
+            .s -- p_int
+            .b -- vdd
+            .pos = (8, 14)
+            .$l = self.l
+            .$w = self.w_feedback

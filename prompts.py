@@ -86,9 +86,9 @@ from ordec.schematic.routing import schematic_routing
 
 cell DiffAmp:
     \"\"\"NMOS differential pair with PMOS active load.\"\"\"
-    l = Parameter(R)
-    w_input = Parameter(R)
-    w_tail = Parameter(R)
+    l = Parameter(R, default=1u)
+    w_input = Parameter(R, default=1u)
+    w_tail = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)
@@ -151,9 +151,9 @@ from ordec.schematic.routing import schematic_routing
 
 cell SizedInverter:
     \"\"\"Basic inverter with configurable sizing.\"\"\"
-    wp = Parameter(R)
-    wn = Parameter(R)
-    l = Parameter(R)
+    wp = Parameter(R, default=1u)
+    wn = Parameter(R, default=1u)
+    l = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)
@@ -191,11 +191,11 @@ cell SizedInverter:
 
 cell InverterChain:
     \"\"\"Parameterized chain of N inverters with progressive sizing.\"\"\"
-    stages = Parameter(int)
-    fanout = Parameter(R)
-    wn_unit = Parameter(R)
-    wp_unit = Parameter(R)
-    l = Parameter(R)
+    stages = Parameter(int, default=3)
+    fanout = Parameter(R, default=2)
+    wn_unit = Parameter(R, default=1u)
+    wp_unit = Parameter(R, default=2u)
+    l = Parameter(R, default=350n)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)
@@ -392,10 +392,9 @@ Available `Orientation` values:
 Orientation affects how the subcell's pins are positioned. The origin (`.pos`) stays fixed; the subcell body rotates/flips around it.
 
 ### Parameter Definition
-`<name> = Parameter(<type>)` defines a configurable cell parameter.
-- `Parameter(int)` — integer parameter (e.g., number of bits)
-- `Parameter(R)` — rational/physical quantity (e.g., resistance, width, length)
-- `Parameter(R, default=R('1u'))` — with default value
+`<name> = Parameter(<type>, default=<value>)` defines a configurable cell parameter.
+- `Parameter(int, default=3)` — integer parameter (e.g., number of bits)
+- `Parameter(R, default=1u)` — rational/physical quantity (e.g., resistance, width, length)
 
 Access inside viewgens with `self.<param>`: `self.bits`, `self.l`, `self.w_unit * self.ratio`
 
@@ -520,16 +519,17 @@ for i in range(self.bits):
 5. Use `.$` for parameters (`pd.$l = 350n`, `.$w = self.w`), `.` for pins (`pd.g -- a`).
 6. Define both `viewgen symbol:` and `viewgen schematic:` inside each cell.
 7. Access cell parameters with `self.`: `self.bits`, `self.l`, `self.w_unit * self.ratio`.
+8. Every `Parameter(...)` declaration must include a default value (e.g. `bits = Parameter(int, default=3)`, `w = Parameter(R, default=1u)`).
 
 **Style rules:**
-8. Place power ports (vdd, vss) first in port definitions
-9. Use meaningful instance names (pd=pull-down, pu=pull-up, m_ref=reference transistor)
-10. Use SI suffixes for physical values
-11. Prefer block syntax for instantiations with multiple connections
-12. Ensure minimum 2-unit spacing; never overlap elements
-13. Position ports according to their alignment direction
-14. Use `port.ref.route = False` for power/clock rails in complex schematics
-15. Use computed positions for repetitive or parameterized layouts
+9. Place power ports (vdd, vss) first in port definitions
+10. Use meaningful instance names (pd=pull-down, pu=pull-up, m_ref=reference transistor)
+11. Use SI suffixes for physical values
+12. Prefer block syntax for instantiations with multiple connections
+13. Ensure minimum 2-unit spacing; never overlap elements
+14. Position ports according to their alignment direction
+15. Use `port.ref.route = False` for power/clock rails in complex schematics
+16. Use computed positions for repetitive or parameterized layouts
 """
 
 # ---------------------------------------------------------------------------
@@ -659,7 +659,8 @@ STAGE_GUIDANCE = {
         "**Instantiation fix hints:**\n"
         "- Verify pin names match component tables (Nmos has g/s/d/b)\n"
         "- Every instance needs `.pos = (x, y)` in viewgen schematic\n"
-        "- Check `self.` parameter access is correct"
+        "- Check `self.` parameter access is correct\n"
+        "- All `Parameter(...)` declarations must provide defaults"
     ),
     "view_access": (
         "**View access fix hints:**\n"
@@ -680,24 +681,6 @@ STAGE_GUIDANCE = {
         "- Increase spacing between the violating instances by adjusting their `.pos` coordinates."
     ),
 }
-
-# ---------------------------------------------------------------------------
-# Parameter suggestion prompt
-# ---------------------------------------------------------------------------
-
-PARAM_SUGGESTION_PROMPT = """\
-You are helping test a parameterized circuit cell by suggesting reasonable parameter values.
-
-Cell name: {cell_name}
-
-Parameters:
-{param_table}
-
-User's circuit request: {user_request}
-
-Suggest reasonable test values for all required parameters (those without defaults). \
-Choose values typical for the circuit type. Use SI suffixes (e.g., 350n, 1u, 100k). \
-For integer parameters like bit counts or stage counts, use small practical values (e.g., 3-8)."""
 
 # ---------------------------------------------------------------------------
 # Spacing fix prompt (for layout_fixer when handling spacing violations)

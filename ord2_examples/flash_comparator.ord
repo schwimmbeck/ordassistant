@@ -85,9 +85,9 @@ cell FlashComparatorStage:
         w_comp: Comparator transistor width
         w_res: Pseudo-resistor width
     """
-    l = Parameter(R)
-    w_comp = Parameter(R)
-    w_res = Parameter(R)
+    l = Parameter(R, default=1u)
+    w_comp = Parameter(R, default=1u)
+    w_res = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)

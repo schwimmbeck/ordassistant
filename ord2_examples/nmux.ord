@@ -18,7 +18,7 @@ import math
 
 
 cell Nto1:
-    N = Parameter(int)
+    N = Parameter(int, default=8)
 
     viewgen symbol:
         path d_in

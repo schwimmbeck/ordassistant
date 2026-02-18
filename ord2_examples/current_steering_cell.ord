@@ -26,9 +26,9 @@ cell CurrentSteeringCell:
         w_sw: Switch transistor width
         w_src: Current source transistor width
     """
-    l = Parameter(R)
-    w_sw = Parameter(R)
-    w_src = Parameter(R)
+    l = Parameter(R, default=1u)
+    w_sw = Parameter(R, default=1u)
+    w_src = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)

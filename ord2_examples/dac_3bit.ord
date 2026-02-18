@@ -27,9 +27,9 @@ cell DAC3Bit:
         w_unit: Unit current source width (LSB)
         w_sw: Switch transistor width
     """
-    l = Parameter(R)
-    w_unit = Parameter(R)
-    w_sw = Parameter(R)
+    l = Parameter(R, default=1u)
+    w_unit = Parameter(R, default=1u)
+    w_sw = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)
@@ -52,7 +52,7 @@ cell DAC3Bit:
         port d2(.pos=(1, 9); .align=Orientation.East)
 
         # Output
-        port iout(.pos=(26, 3); .align=Orientation.West)
+        port iout(.pos=(28, 3); .align=Orientation.West)
 
         # Internal nets
         net tail0

@@ -35,6 +35,7 @@ RAG_TOP_K = 3
 # Retry settings
 MAX_CIRCUIT_RETRIES = 3  # Attempts for generator (all 7 stages)
 MAX_SPACING_RETRIES = 2  # Attempts for spacing violation fixes
+VALIDATION_TIMEOUT_SECONDS = 45
 
 # Temperature escalation for circuit generator retries
 CIRCUIT_GENERATOR_TEMPS = [0.0, 0.3, 0.6]

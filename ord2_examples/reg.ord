@@ -61,7 +61,7 @@ cell DFF:
         return ctx.root
 
 cell MultibitReg_Arrays:
-    bits = Parameter(int)
+    bits = Parameter(int, default=2)
     viewgen symbol:
         input vdd(.align=Orientation.North)
         input vss(.align=Orientation.South)

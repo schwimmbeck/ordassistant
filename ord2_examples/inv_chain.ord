@@ -27,9 +27,9 @@ cell SizedInverter:
         wn: NMOS width
         l: Channel length (shared)
     """
-    wp = Parameter(R)
-    wn = Parameter(R)
-    l = Parameter(R)
+    wp = Parameter(R, default=1u)
+    wn = Parameter(R, default=1u)
+    l = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)
@@ -82,11 +82,11 @@ cell InverterChain:
 
     Sizing: Stage i has width = unit_width * fanout^i
     """
-    stages = Parameter(int)
-    fanout = Parameter(R)
-    wn_unit = Parameter(R)
-    wp_unit = Parameter(R)
-    l = Parameter(R)
+    stages = Parameter(int, default=2)
+    fanout = Parameter(R, default=1u)
+    wn_unit = Parameter(R, default=1u)
+    wp_unit = Parameter(R, default=1u)
+    l = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)
@@ -163,9 +163,9 @@ cell RingOscillator:
 
     Note: stages must be odd for the circuit to oscillate!
     """
-    stages = Parameter(int)
-    w = Parameter(R)
-    l = Parameter(R)
+    stages = Parameter(int, default=2)
+    w = Parameter(R, default=1u)
+    l = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)

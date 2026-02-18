@@ -32,8 +32,8 @@ cell CapDacSwitch:
         l: Channel length
         w_sw: Switch transistor width
     """
-    l = Parameter(R)
-    w_sw = Parameter(R)
+    l = Parameter(R, default=1u)
+    w_sw = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)
@@ -104,9 +104,9 @@ cell CapDacArray:
         l: Channel length
         w_sw: Switch transistor width
     """
-    bits = Parameter(int)
-    l = Parameter(R)
-    w_sw = Parameter(R)
+    bits = Parameter(int, default=2)
+    l = Parameter(R, default=1u)
+    w_sw = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)

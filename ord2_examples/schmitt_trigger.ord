@@ -38,9 +38,9 @@ cell SchmittTrigger:
         - VIL (low threshold): triggered when output is high
         - Hysteresis = VIH - VIL
     """
-    l = Parameter(R)
-    w_main = Parameter(R)
-    w_feedback = Parameter(R)
+    l = Parameter(R, default=1u)
+    w_main = Parameter(R, default=1u)
+    w_feedback = Parameter(R, default=1u)
 
     viewgen symbol:
         input vin(.align=Orientation.West)

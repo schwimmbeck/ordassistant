@@ -30,8 +30,8 @@ cell DFFSimple:
         l: Channel length
         w: Transistor width
     """
-    l = Parameter(R)
-    w = Parameter(R)
+    l = Parameter(R, default=1u)
+    w = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)
@@ -127,9 +127,9 @@ cell SARRegister:
         l: Channel length
         w: Transistor width
     """
-    bits = Parameter(int)
-    l = Parameter(R)
-    w = Parameter(R)
+    bits = Parameter(int, default=2)
+    l = Parameter(R, default=1u)
+    w = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)

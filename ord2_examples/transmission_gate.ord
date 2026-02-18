@@ -22,9 +22,9 @@ cell TransmissionGate:
         wn: NMOS width
         wp: PMOS width (typically 2-3x wn for equal resistance)
     """
-    l = Parameter(R)
-    wn = Parameter(R)
-    wp = Parameter(R)
+    l = Parameter(R, default=1u)
+    wn = Parameter(R, default=1u)
+    wp = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)

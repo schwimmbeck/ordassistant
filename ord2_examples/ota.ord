@@ -70,9 +70,9 @@ cell SimpleMirror:
 
     The output uses a single transistor with W = ratio * w_unit.
     """
-    ratio = Parameter(int)
-    l = Parameter(R)
-    w_unit = Parameter(R)
+    ratio = Parameter(int, default=2)
+    l = Parameter(R, default=1u)
+    w_unit = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)
@@ -124,9 +124,9 @@ cell ParameterizedOTA:
         l_bias: Channel length for bias transistors (matching)
         w_bias: Width for bias transistors
     """
-    output_mult = Parameter(int)
-    l_bias = Parameter(R)
-    w_bias = Parameter(R)
+    output_mult = Parameter(int, default=2)
+    l_bias = Parameter(R, default=1u)
+    w_bias = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)

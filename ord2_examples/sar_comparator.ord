@@ -35,10 +35,10 @@ cell SARComparator:
         - clk=0: Track mode, preamp active, latch reset
         - clk=1: Latch mode, preamp off, regeneration
     """
-    l = Parameter(R)
-    w_input = Parameter(R)
-    w_latch = Parameter(R)
-    w_tail = Parameter(R)
+    l = Parameter(R, default=1u)
+    w_input = Parameter(R, default=1u)
+    w_latch = Parameter(R, default=1u)
+    w_tail = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)

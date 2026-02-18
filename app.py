@@ -16,28 +16,38 @@ def chat_handler(
     temperature: float,
     reasoning_effort: str,
 ) -> str:
-    # Invoke the LangGraph pipeline
-    result = pipeline.invoke({
-        "user_message": message,
-        "chat_history": history,
-        "intent": "",
-        "retrieved_examples": "",
-        "retrieved_docs": [],
-        "generator_messages": [],
-        "generated_code": "",
-        "generator_reasoning": "",
-        "cell_names": [],
-        "circuit_validation_success": False,
-        "circuit_error_stage": "",
-        "circuit_error_message": "",
-        "circuit_attempt": 0,
-        "spacing_attempt": 0,
-        "svg_bytes": None,
-        "question_response": "",
-        "final_response": "",
-    })
+    try:
+        # Invoke the LangGraph pipeline
+        result = pipeline.invoke({
+            "user_message": message,
+            "chat_history": history,
+            "temperature": float(temperature),
+            "reasoning_effort": reasoning_effort,
+            "intent": "",
+            "retrieved_examples": "",
+            "retrieved_docs": [],
+            "generator_messages": [],
+            "generated_code": "",
+            "generator_reasoning": "",
+            "cell_names": [],
+            "circuit_validation_success": False,
+            "circuit_error_stage": "",
+            "circuit_error_code": "",
+            "circuit_error_message": "",
+            "circuit_attempt": 0,
+            "spacing_attempt": 0,
+            "svg_bytes": None,
+            "question_response": "",
+            "final_response": "",
+        })
 
-    return result.get("final_response", "")
+        return result.get("final_response", "")
+    except Exception as exc:
+        logging.exception("Pipeline execution failed")
+        return (
+            "The pipeline encountered an internal error while processing your request.\n\n"
+            f"`{exc.__class__.__name__}: {exc}`"
+        )
 
 
 def main():

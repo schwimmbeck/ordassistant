@@ -14,7 +14,7 @@ from ordec.ord2.context import ctx, OrdContext
 from ordec.schematic.routing import schematic_routing
 
 cell MultibitReg_ArrayOfStructs:
-    bits = Parameter(int)
+    bits = Parameter(int, default=2)
     viewgen symbol:
         input vdd(.align=Orientation.North)
         input vss(.align=Orientation.South)

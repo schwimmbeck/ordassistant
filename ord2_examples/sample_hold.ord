@@ -32,9 +32,9 @@ cell SampleAndHold:
         wn: NMOS width for switches
         wp: PMOS width for switches
     """
-    l = Parameter(R)
-    wn = Parameter(R)
-    wp = Parameter(R)
+    l = Parameter(R, default=1u)
+    wn = Parameter(R, default=1u)
+    wp = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)

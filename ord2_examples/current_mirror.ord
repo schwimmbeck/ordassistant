@@ -28,9 +28,9 @@ cell SimpleMirror:
 
     The output uses a single transistor with W = ratio * w_unit.
     """
-    ratio = Parameter(int)
-    l = Parameter(R)
-    w_unit = Parameter(R)
+    ratio = Parameter(int, default=2)
+    l = Parameter(R, default=1u)
+    w_unit = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)
@@ -77,9 +77,9 @@ cell CascodeMirror:
         l: Channel length for all transistors (for matching)
         w_unit: Unit transistor width
     """
-    ratio = Parameter(int)
-    l = Parameter(R)
-    w_unit = Parameter(R)
+    ratio = Parameter(int, default=2)
+    l = Parameter(R, default=1u)
+    w_unit = Parameter(R, default=1u)
 
     viewgen symbol:
         inout vdd(.align=Orientation.North)

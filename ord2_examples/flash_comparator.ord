@@ -15,6 +15,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell StrongarmLatch:
     viewgen symbol:
@@ -25,6 +26,8 @@ cell StrongarmLatch:
         input clk(.align=Orientation.West)
         output outp(.align=Orientation.East)
         output outn(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Power ports
@@ -65,6 +68,9 @@ cell StrongarmLatch:
         # Precharge PMOS (reset when clk low)
         Pmos m_pre1(.pos=(8, 34); .g -- clk; .d -- outp; .s -- vdd; .b -- vdd)
         Pmos m_pre2(.pos=(20, 34); .g -- clk; .d -- outn; .s -- vdd; .b -- vdd)
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell FlashComparatorStage:
     """
@@ -91,6 +97,8 @@ cell FlashComparatorStage:
         output vref_bot(.align=Orientation.East)
         input clk(.align=Orientation.West)
         output dout(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Power
@@ -151,3 +159,6 @@ cell FlashComparatorStage:
             .outp -- dout
             .outn -- dout_n
             .pos = (16, 6)
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

@@ -14,6 +14,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell DiffAmp:
     viewgen symbol:
@@ -24,6 +25,8 @@ cell DiffAmp:
         input vbias(.align=Orientation.West)
         output outp(.align=Orientation.East)
         output outn(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Power ports
@@ -52,6 +55,9 @@ cell DiffAmp:
         # PMOS active load (current mirror)
         Pmos m_p1(.pos=(6, 22); .g -- outn; .d -- outn; .s -- vdd; .b -- vdd)
         Pmos m_p2(.pos=(18, 22); .g -- outn; .d -- outp; .s -- vdd; .b -- vdd)
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell MillerOpamp:
     viewgen symbol:
@@ -62,6 +68,8 @@ cell MillerOpamp:
         input vbias1(.align=Orientation.West)
         input vbias2(.align=Orientation.West)
         output vout(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # ==================================================
@@ -119,3 +127,6 @@ cell MillerOpamp:
         # Note: Miller compensation capacitor (Cc) would connect
         # between vout and stage1_outn for frequency compensation.
         # Capacitors not shown in this transistor-level schematic.
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

@@ -16,6 +16,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell LevelShifter:
     l = Parameter(R)
@@ -29,6 +30,8 @@ cell LevelShifter:
         input vin_n(.align=Orientation.East)
         output vout(.align=Orientation.East)
         output vout_n(.align=Orientation.West)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         port vdd(.pos=(1, 20); .align=Orientation.East)
@@ -89,3 +92,6 @@ cell LevelShifter:
             .orientation = Orientation.FlippedSouth
             .$l = self.l
             .$w = self.wp
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

@@ -13,6 +13,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell DAC3Bit:
     """
@@ -37,6 +38,8 @@ cell DAC3Bit:
         input d1(.align=Orientation.West)
         input d2(.align=Orientation.West)
         output iout(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Power and bias
@@ -88,3 +91,6 @@ cell DAC3Bit:
         Pmos m_sw2(.pos=(22, 4); .g -- d2; .d -- iout; .s -- tail2; .b -- vdd)
         m_sw2.$l = self.l
         m_sw2.$w = self.w_sw
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

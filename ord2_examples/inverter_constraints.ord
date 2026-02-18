@@ -13,6 +13,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos,Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell Inv:
     viewgen symbol:
@@ -20,6 +21,8 @@ cell Inv:
         inout vss(.align=Orientation.South)
         input a(.align=Orientation.West)
         output y(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         port vdd(.align=Orientation.North)
@@ -50,4 +53,6 @@ cell Inv:
 
         for instance in pu, pd:
             instance.g -- a
-
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

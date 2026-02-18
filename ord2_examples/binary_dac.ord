@@ -14,6 +14,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell BinaryWeightedDAC:
     """
@@ -43,6 +44,8 @@ cell BinaryWeightedDAC:
             input d_n[i](.align=Orientation.West)
         output ioutp(.align=Orientation.East)
         output ioutn(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         x_spacing = 14  # More spacing between bits
@@ -114,3 +117,6 @@ cell BinaryWeightedDAC:
                 .pos = (x_pos + 6, 10)
                 .$l = self.l
                 .$w = self.w_sw
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

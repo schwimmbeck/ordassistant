@@ -21,6 +21,8 @@ cell Mux2:
         inout vdd(.align=Orientation.North)
         inout vss(.align=Orientation.South)
         input s(.align=Orientation.West)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         port y(.align=Orientation.West; .pos=(21, 18))
@@ -48,3 +50,6 @@ cell Mux2:
         Pmos p4 (.s -- p3_p4; .b -- vdd; .d -- y;    .g -- s; .pos=(15, 19))
         Nmos n4 (.s -- n3_n4; .b -- vss; .d -- y;    .g -- s_n; .pos=(15, 11))
         Nmos n3 (.s -- vss;  .b -- vss; .d -- n3_n4; .g -- b; .pos=(15, 5))
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

@@ -76,6 +76,17 @@ def build_vectorstore(force_rebuild: bool = False) -> Chroma:
     return vectorstore
 
 
+_vectorstore_cache: Chroma | None = None
+
+
+def get_vectorstore() -> Chroma:
+    """Return cached vectorstore, building it on first call."""
+    global _vectorstore_cache
+    if _vectorstore_cache is None:
+        _vectorstore_cache = build_vectorstore()
+    return _vectorstore_cache
+
+
 def query_similar_examples(
     vectorstore: Chroma, query: str, k: int = RAG_TOP_K
 ) -> list[Document]:

@@ -15,6 +15,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell SimpleMirror:
     """
@@ -35,6 +36,8 @@ cell SimpleMirror:
         inout vdd(.align=Orientation.North)
         input iref(.align=Orientation.West)
         output iout(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Ports
@@ -61,7 +64,9 @@ cell SimpleMirror:
             .pos = (16, 10)
             .$l = self.l
             .$w = self.w_unit * self.ratio
-
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell CascodeMirror:
     """
@@ -81,6 +86,8 @@ cell CascodeMirror:
         input iref(.align=Orientation.West)
         output iout(.align=Orientation.East)
         input vbias(.align=Orientation.West)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Ports
@@ -138,3 +145,6 @@ cell CascodeMirror:
             .pos = (18, 10)
             .$l = self.l
             .$w = self.w_unit * self.ratio
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

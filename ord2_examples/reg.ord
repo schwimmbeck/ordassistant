@@ -16,6 +16,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell DFF:
     viewgen symbol:
@@ -24,6 +25,8 @@ cell DFF:
         input d(.align=Orientation.West)
         input clk(.align=Orientation.West)
         output q(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         port vdd(.pos=(1, 18); .align=Orientation.East)
@@ -53,6 +56,9 @@ cell DFF:
         # Slave pass gate (transparent when clk=1)
         Nmos ns_pass(.pos=(30, 5); .g -- clk; .d -- q; .s -- slave_in; .b -- vss)
         Pmos ps_pass(.pos=(30, 12); .g -- clk_n; .d -- q; .s -- slave_in; .b -- vdd)
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell MultibitReg_Arrays:
     bits = Parameter(int)
@@ -65,6 +71,8 @@ cell MultibitReg_Arrays:
             input d[i](.align=Orientation.West)
             output q[i](.align=Orientation.East)
         input clk(.align=Orientation.West)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         port vss(.pos=(1,1); .align=Orientation.East)
@@ -83,3 +91,6 @@ cell MultibitReg_Arrays:
                 .d -- d[i]
                 .q -- q[i]
             I[i].pos = (6, 3 + 8 * i)
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

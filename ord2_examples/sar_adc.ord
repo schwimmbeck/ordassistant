@@ -17,6 +17,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell CapDacSwitch:
     """
@@ -43,6 +44,8 @@ cell CapDacSwitch:
         input bit(.align=Orientation.West)
         input bit_n(.align=Orientation.West)
         output vbot(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Power
@@ -85,6 +88,9 @@ cell CapDacSwitch:
             .pos = (10, 6)
             .$l = self.l
             .$w = self.w_sw
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell DFFSimple:
     """
@@ -106,6 +112,8 @@ cell DFFSimple:
         input clk(.align=Orientation.West)
         output q(.align=Orientation.East)
         output q_n(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         port vdd(.pos=(1, 20); .align=Orientation.East)
@@ -175,6 +183,9 @@ cell DFFSimple:
         Pmos ps_inv(.pos=(38, 14); .g -- q_n; .d -- q; .s -- vdd; .b -- vdd)
         ps_inv.$l = self.l
         ps_inv.$w = self.w
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell SARComparator:
     """
@@ -207,6 +218,8 @@ cell SARComparator:
         input clk(.align=Orientation.West)
         output outp(.align=Orientation.East)
         output outn(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Power rails
@@ -277,7 +290,9 @@ cell SARComparator:
         Pmos m_rst2(.pos=(20, 34); .g -- clk; .d -- outn; .s -- vdd; .b -- vdd)
         m_rst2.$l = self.l
         m_rst2.$w = self.w_latch
-
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell SARADC:
     """
@@ -312,6 +327,8 @@ cell SARADC:
         path dout
         for i in range(self.bits):
             output dout[i](.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Layout spacing
@@ -457,3 +474,6 @@ cell SARADC:
                 .pos = (buf_x, 16 + i * dff_spacing)
                 .$l = self.l
                 .$w = self.w_logic * 2
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

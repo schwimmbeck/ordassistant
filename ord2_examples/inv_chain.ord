@@ -16,6 +16,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell SizedInverter:
     """
@@ -35,6 +36,8 @@ cell SizedInverter:
         inout vss(.align=Orientation.South)
         input a(.align=Orientation.West)
         output y(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         port vdd(.pos=(1, 16); .align=Orientation.East)
@@ -59,7 +62,9 @@ cell SizedInverter:
             .pos = (6, 10)
             .$l = self.l
             .$w = self.wp
-
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell InverterChain:
     """
@@ -88,6 +93,8 @@ cell InverterChain:
         inout vss(.align=Orientation.South)
         input a(.align=Orientation.West)
         output y(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Calculate total width needed
@@ -141,7 +148,9 @@ cell InverterChain:
                 .$wp = wp_stage
                 .$wn = wn_stage
                 .$l = self.l
-
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell RingOscillator:
     """
@@ -162,6 +171,8 @@ cell RingOscillator:
         inout vdd(.align=Orientation.North)
         inout vss(.align=Orientation.South)
         output osc_out(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         x_spacing = 8
@@ -208,3 +219,6 @@ cell RingOscillator:
                 .$wp = self.w * 2  # PMOS 2x for balanced rise/fall
                 .$wn = self.w
                 .$l = self.l
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

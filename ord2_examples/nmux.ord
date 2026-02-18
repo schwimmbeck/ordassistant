@@ -35,6 +35,8 @@ cell Nto1:
         signal_count = int(math.log(self.N, 2))
         for i in range(signal_count):
             input s_in[i](.align=Orientation.West)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
 
     viewgen schematic:
@@ -131,3 +133,6 @@ cell Nto1:
             .y -- y
             .s -- s_in[last]
             .pos = (px, py)
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

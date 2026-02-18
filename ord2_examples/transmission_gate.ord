@@ -11,6 +11,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell TransmissionGate:
     """
@@ -32,6 +33,8 @@ cell TransmissionGate:
         output vout(.align=Orientation.East)
         input en(.align=Orientation.North)
         input en_n(.align=Orientation.South)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         port vdd(.pos=(1, 18); .align=Orientation.East)
@@ -60,3 +63,6 @@ cell TransmissionGate:
             .pos = (8, 12)
             .$l = self.l
             .$w = self.wp
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

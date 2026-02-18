@@ -11,6 +11,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos,Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell MultibitReg_StructOfArrays:
     bits = Parameter(int)
@@ -24,4 +25,6 @@ cell MultibitReg_StructOfArrays:
             input bit.d[i](.align=Orientation.West)
             output bit.q[i](.align=Orientation.East)
         input clk(.align=Orientation.West)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 

@@ -14,6 +14,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell DiffAmp:
     viewgen symbol:
@@ -24,6 +25,8 @@ cell DiffAmp:
         input vbias(.align=Orientation.West)
         output outp(.align=Orientation.East)
         output outn(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Power ports
@@ -52,6 +55,9 @@ cell DiffAmp:
         # PMOS active load (current mirror)
         Pmos m_p1(.pos=(6, 22); .g -- outn; .d -- outn; .s -- vdd; .b -- vdd)
         Pmos m_p2(.pos=(18, 22); .g -- outn; .d -- outp; .s -- vdd; .b -- vdd)
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell SimpleMirror:
     """
@@ -72,6 +78,8 @@ cell SimpleMirror:
         inout vdd(.align=Orientation.North)
         input iref(.align=Orientation.West)
         output iout(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Ports
@@ -98,6 +106,9 @@ cell SimpleMirror:
             .pos = (16, 10)
             .$l = self.l
             .$w = self.w_unit * self.ratio
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell ParameterizedOTA:
     """
@@ -124,6 +135,8 @@ cell ParameterizedOTA:
         input inn(.align=Orientation.West)
         input ibias(.align=Orientation.West)
         output vout(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # ==================================================
@@ -201,3 +214,6 @@ cell ParameterizedOTA:
             .pos = (28, 10)
             .$l = self.l_bias
             .$w = self.w_bias * self.output_mult
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

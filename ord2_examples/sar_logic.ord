@@ -18,6 +18,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell DFFSimple:
     """
@@ -39,6 +40,8 @@ cell DFFSimple:
         input clk(.align=Orientation.West)
         output q(.align=Orientation.East)
         output q_n(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         port vdd(.pos=(1, 20); .align=Orientation.East)
@@ -109,6 +112,9 @@ cell DFFSimple:
         ps_inv.$l = self.l
         ps_inv.$w = self.w
 
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell SARRegister:
     """
@@ -136,6 +142,8 @@ cell SARRegister:
         for i in range(self.bits):
             output dout[i](.align=Orientation.East)
             output dout_n[i](.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         y_spacing = 10
@@ -172,3 +180,6 @@ cell SARRegister:
                 .pos = (6, y_pos)
                 .$l = self.l
                 .$w = self.w
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

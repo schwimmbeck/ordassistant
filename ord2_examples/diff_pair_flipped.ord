@@ -12,6 +12,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell DiffAmpFlipped:
     viewgen symbol:
@@ -22,6 +23,8 @@ cell DiffAmpFlipped:
         input vbias(.align=Orientation.West)
         output outp(.align=Orientation.East)
         output outn(.align=Orientation.West)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         port vdd(.pos=(1, 23); .align=Orientation.East)
@@ -76,3 +79,6 @@ cell DiffAmpFlipped:
             .b -- vdd
             .pos = (16, 18)
             .orientation = Orientation.FlippedSouth
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

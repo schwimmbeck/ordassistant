@@ -1,15 +1,13 @@
-import base64
+import logging
 
 import gradio as gr
 
-from agents import OrdAssistant
+from graph import build_graph
 
-assistant: OrdAssistant | None = None
+logging.basicConfig(level=logging.INFO)
 
-
-def initialize():
-    global assistant
-    assistant = OrdAssistant()
+# Build the LangGraph pipeline once at module level
+pipeline = build_graph()
 
 
 def chat_handler(
@@ -18,34 +16,35 @@ def chat_handler(
     temperature: float,
     reasoning_effort: str,
 ) -> str:
-    if assistant is None:
-        initialize()
+    # Invoke the LangGraph pipeline
+    result = pipeline.invoke({
+        "user_message": message,
+        "chat_history": history,
+        "intent": "",
+        "retrieved_examples": "",
+        "retrieved_docs": [],
+        "generator_messages": [],
+        "generated_code": "",
+        "generator_reasoning": "",
+        "cell_names": [],
+        "circuit_validation_success": False,
+        "circuit_error_stage": "",
+        "circuit_error_message": "",
+        "circuit_attempt": 0,
+        "spacing_attempt": 0,
+        "svg_bytes": None,
+        "question_response": "",
+        "final_response": "",
+    })
 
-    # Apply runtime LLM settings
-    effort = None if reasoning_effort == "none" else reasoning_effort
-    assistant.update_llm_settings(temperature=temperature, reasoning_effort=effort)
-
-    response_text, result = assistant.process_message(message, history)
-
-    # Embed SVG preview if validation produced one
-    if result and result.success and result.svg_bytes:
-        svg_b64 = base64.b64encode(result.svg_bytes).decode("ascii")
-        svg_html = (
-            f'\n\n**Circuit Preview:**\n\n'
-            f'<img src="data:image/svg+xml;base64,{svg_b64}" '
-            f'alt="Circuit schematic" style="max-width:100%; background:white; padding:8px;">'
-        )
-        response_text += svg_html
-
-    return response_text
+    return result.get("final_response", "")
 
 
 def main():
-    initialize()
     demo = gr.ChatInterface(
         fn=chat_handler,
         title="ORD Circuit Generator",
-        description="Generate and validate ORD circuit descriptions with RAG-assisted code generation.",
+        description="Multi-agent ORD circuit generator with RAG, validation, and spacing check.",
         additional_inputs=[
             gr.Slider(
                 minimum=0.0,

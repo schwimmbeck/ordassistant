@@ -17,6 +17,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell SampleAndHold:
     """
@@ -45,6 +46,8 @@ cell SampleAndHold:
         input sample_early(.align=Orientation.West)
         input sample_early_n(.align=Orientation.West)
         inout vhold(.align=Orientation.South)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Power rails
@@ -103,3 +106,6 @@ cell SampleAndHold:
             .pos = (26, 12)
             .$l = self.l
             .$w = self.wp
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

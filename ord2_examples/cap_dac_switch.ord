@@ -16,6 +16,7 @@ from ordec.core import *
 from ordec.schematic import helpers
 from ordec.lib.generic_mos import Nmos, Pmos
 from ordec.ord2.context import ctx, OrdContext
+from ordec.schematic.routing import schematic_routing
 
 cell CapDacSwitch:
     """
@@ -42,6 +43,8 @@ cell CapDacSwitch:
         input bit(.align=Orientation.West)
         input bit_n(.align=Orientation.West)
         output vbot(.align=Orientation.East)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         # Power
@@ -84,7 +87,9 @@ cell CapDacSwitch:
             .pos = (10, 6)
             .$l = self.l
             .$w = self.w_sw
-
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root
 
 cell CapDacArray:
     """
@@ -116,6 +121,8 @@ cell CapDacArray:
         output vtop(.align=Orientation.East)
         input sample(.align=Orientation.West)
         input vin(.align=Orientation.West)
+        helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
+        return ctx.root
 
     viewgen schematic:
         x_spacing = 12
@@ -192,3 +199,6 @@ cell CapDacArray:
             # Note: The actual capacitor would connect vbot[i] to vtop
             # Capacitors are not modeled here, just the switches
             # In practice, MIM capacitors with binary weights would be used
+        helpers.resolve_instances(ctx.root)
+        ctx.root.outline = schematic_routing(ctx.root)
+        return ctx.root

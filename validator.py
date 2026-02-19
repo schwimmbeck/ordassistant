@@ -29,7 +29,7 @@ from contracts import (
     STAGE_VIEW_ACCESS,
 )
 from ordec.core.cell import Cell, Parameter, ParameterError
-from ordec.core.geoprim import Rect4R
+from ordec.core.geoprim import D4, Rect4R, Vec2R
 from ordec.core.schema import SchemInstance, SchemPort
 from ordec.language import ord_to_py
 from ordec.render import render
@@ -44,6 +44,7 @@ class ValidationResult:
     error_code: str = ""
     cell_names: list[str] = field(default_factory=list)
     spacing_violations: list[str] = field(default_factory=list)
+    fixed_source: str | None = None
 
 
 def _error_code_for_stage(stage: str) -> str:
@@ -254,6 +255,202 @@ def _instantiate_cell(cell_cls, test_params: dict[str, str] | None):
         raise
 
 
+def _compile_to_view(
+    source: str,
+    test_params: dict[str, str] | None = None,
+) -> tuple | ValidationResult:
+    """Compile ORD source through stages 1-6 and return the schematic view.
+
+    Returns ``(view, cell_cls, cell_names)`` on success, or a
+    ``ValidationResult`` error if any stage fails.
+    """
+    import ordec.importer  # noqa: F401
+
+    try:
+        py_ast = ord_to_py(source)
+    except Exception as exc:
+        return _validation_error(STAGE_PARSING, _safe_error(exc), error_code=ERR_PARSE_FAILURE)
+
+    try:
+        code = compile(py_ast, "<string>", "exec")
+    except Exception as exc:
+        return _validation_error(STAGE_COMPILATION, _safe_error(exc), error_code=ERR_COMPILE_FAILURE)
+
+    conn_globals = {"public": lambda obj: obj}
+    try:
+        exec(code, conn_globals, conn_globals)
+    except Exception as exc:
+        return _validation_error(STAGE_EXECUTION, _safe_error(exc), error_code=ERR_EXEC_FAILURE)
+
+    cell_classes = _discover_cells(source, conn_globals)
+    if not cell_classes:
+        return _validation_error(
+            STAGE_DISCOVERY,
+            "No Cell subclasses found in the generated code.",
+            error_code=ERR_NO_CELL_DISCOVERED,
+        )
+
+    cell_names = [name for name, _ in cell_classes]
+
+    # Prefer the most recently defined cell (top-level design).
+    for name, cell_cls in reversed(cell_classes):
+        try:
+            instance = _instantiate_cell(cell_cls, test_params)
+        except ParameterError as exc:
+            continue
+        except Exception:
+            continue
+
+        try:
+            view = getattr(instance, "schematic")
+        except AttributeError:
+            continue
+        except Exception as exc:
+            return _validation_error(
+                STAGE_VIEW_ACCESS,
+                _safe_error(exc),
+                error_code=ERR_VIEW_ACCESS_FAILURE,
+                cell_names=cell_names,
+            )
+
+        return (view, cell_cls, cell_names)
+
+    return _validation_error(
+        STAGE_VIEW_ACCESS,
+        "No renderable schematic view was found in discovered cells.",
+        error_code=ERR_VIEW_ACCESS_FAILURE,
+        cell_names=cell_names,
+    )
+
+
+def _fix_spacing_in_process(
+    source: str,
+    changes: list[dict],
+    test_params: dict[str, str] | None = None,
+) -> ValidationResult:
+    """Apply layout changes at the object level, verify, render, and write back.
+
+    1. Compiles source to get live schematic objects (stages 1-6).
+    2. Mutates SchemPort/SchemInstance positions and alignments.
+    3. Verifies spacing via ``check_layout_spacing``.
+    4. Renders SVG from mutated objects.
+    5. Writes known-good positions back to source text.
+    """
+    result = _compile_to_view(source, test_params)
+    if isinstance(result, ValidationResult):
+        return result  # compilation failed
+    view, cell_cls, cell_names = result
+
+    # Build name → object mapping
+    elements: dict[str, SchemPort | SchemInstance] = {}
+    for port in view.all(SchemPort):
+        elements[port.full_path_str()] = port
+    for inst in view.all(SchemInstance):
+        elements[inst.full_path_str()] = inst
+
+    # Apply changes to live objects
+    for change in changes:
+        obj = elements.get(change.get("element_name", ""))
+        if obj is None:
+            continue
+        if change.get("new_pos_x") is not None and change.get("new_pos_y") is not None:
+            obj.pos = Vec2R(change["new_pos_x"], change["new_pos_y"])
+        if change.get("new_alignment") and isinstance(obj, SchemPort):
+            align_name = change["new_alignment"]
+            if hasattr(D4, align_name):
+                obj.align = getattr(D4, align_name)
+
+    # Verify spacing on mutated objects
+    violations = check_layout_spacing(view)
+    if violations:
+        violations_text = "Spacing violations found:\n" + "\n".join(
+            f"- {v}" for v in violations
+        )
+        return _validation_error(
+            STAGE_SPACING,
+            violations_text,
+            error_code=ERR_SPACING_VIOLATION,
+            cell_names=cell_names,
+            spacing_violations=violations,
+        )
+
+    # Render from fixed objects
+    try:
+        svg_bytes = render(view).svg()
+    except Exception as exc:
+        return _validation_error(
+            STAGE_RENDERING,
+            _safe_error(exc),
+            error_code=ERR_RENDER_FAILURE,
+            cell_names=cell_names,
+        )
+
+    # Write known-good positions back to source (best-effort via existing regex)
+    # Build lightweight objects with the attributes apply_layout_fixes expects
+    updated_source = _apply_layout_fixes_from_dicts(source, changes)
+
+    return ValidationResult(
+        success=True,
+        svg_bytes=svg_bytes,
+        cell_names=cell_names,
+        fixed_source=updated_source,
+    )
+
+
+def _apply_layout_fixes_from_dicts(source: str, changes: list[dict]) -> str:
+    """Apply layout fixes from dict-based changes (subprocess-safe)."""
+    for change in changes:
+        name = change.get("element_name", "")
+        new_x = change.get("new_pos_x")
+        new_y = change.get("new_pos_y")
+        if new_x is not None and new_y is not None:
+            source = _replace_element_pos(source, name, new_x, new_y)
+        new_align = change.get("new_alignment")
+        if new_align:
+            source = _replace_port_alignment(source, name, new_align)
+        if change.get("disable_route"):
+            source = _add_route_disable(source, name)
+    return source
+
+
+def fix_spacing_via_worker(
+    source: str,
+    changes: list[dict],
+    test_params: dict[str, str] | None = None,
+) -> ValidationResult:
+    """Fix spacing via subprocess worker using object-level mutation."""
+    worker_payload = _run_worker({
+        "operation": "fix_spacing",
+        "source": source,
+        "changes": changes,
+        "test_params": test_params,
+    })
+
+    if worker_payload.get("ok") is False and "result" not in worker_payload:
+        stage = worker_payload.get("error_stage", STAGE_RUNTIME)
+        code = worker_payload.get("error_code") or _error_code_for_stage(stage)
+        return ValidationResult(
+            success=False,
+            error_stage=stage,
+            error_code=code,
+            error_message=worker_payload.get("error_message", "Fix-spacing worker failed."),
+        )
+
+    result_payload = worker_payload.get("result") if "result" in worker_payload else worker_payload
+    if not isinstance(result_payload, dict):
+        return ValidationResult(
+            success=False,
+            error_stage=STAGE_RUNTIME,
+            error_code=ERR_VALIDATION_RUNTIME,
+            error_message="Fix-spacing worker returned malformed result payload.",
+        )
+
+    result = _payload_to_result(result_payload)
+    if not result.success and not result.error_code:
+        result.error_code = _error_code_for_stage(result.error_stage)
+    return result
+
+
 def _validate_ord_code_structure_in_process(
     source: str,
     test_params: dict[str, str] | None = None,
@@ -452,6 +649,7 @@ def _result_to_payload(result: ValidationResult) -> dict:
         "error_code": result.error_code,
         "cell_names": result.cell_names,
         "spacing_violations": result.spacing_violations,
+        "fixed_source": result.fixed_source,
     }
 
 
@@ -466,6 +664,7 @@ def _payload_to_result(payload: dict) -> ValidationResult:
         error_code=payload.get("error_code", ""),
         cell_names=list(payload.get("cell_names", [])),
         spacing_violations=list(payload.get("spacing_violations", [])),
+        fixed_source=payload.get("fixed_source"),
     )
 
 

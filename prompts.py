@@ -261,6 +261,7 @@ Key observations:
 - Parameters accessed with `.$` (dollar): `pd.$l = 350n`, `.$w = self.w_unit`
 - Cell parameters accessed with `self.`: `self.l`, `self.bits`, `self.w_unit * self.ratio`
 - Connections use `--`: `.s -- vss`, `instance.g -- a`
+- Ports ARE nets — NEVER write `port_name -- net_name`; connect instances directly to the port
 - `port.ref.route = False` disables automatic routing for globally-connected nets like power rails
 - Computed positions: `y_pos = 4 + i * y_spacing`, `.pos = (6, y_pos)`
 - Multiple cells can be defined in one file
@@ -269,12 +270,12 @@ Key observations:
 ## Grammar Rules
 
 ### Helpers
-- Helpers for symbols which must always be appended: 
+- Helpers for symbols which must always be appended, at the end of the `viewgen symbol`: 
 ```
         helpers.symbol_place_pins(ctx.root, vpadding=2, hpadding=2)
         return ctx.root
 ```
-- Helpers for schematics which must always be appended:
+- Helpers for schematics which must always be appended, at the end of the `viewgen schematic`:
 ```
         helpers.resolve_instances(ctx.root)
         ctx.root.outline = schematic_routing(ctx.root)
@@ -312,6 +313,42 @@ net tail               # declare first
 Nmos m_tail(.d -- tail; ...)   # then use
 Nmos m_inp(.s -- tail; ...)    # connects through 'tail'
 ```
+
+### Port Internal Nets
+**Every port already acts as a net.** You MUST NOT create a separate net and then wire it to a port. A port can be used anywhere a net can — connect instances DIRECTLY to the port name.
+
+**Rule: `port_name -- net_name` is ALWAYS wrong. Never wire a port to a net.**
+
+```
+# WRONG — redundant net wired to port:
+port out(.pos=(20, 7); .align=Orientation.West)
+net out_net
+Ringosc ring(.y -- out_net; ...)
+out -- out_net          # ILLEGAL: wiring port to net
+
+# CORRECT — connect directly to the port:
+port out(.pos=(20, 7); .align=Orientation.West)
+Ringosc ring(.y -- out; ...)   # port IS the net
+```
+
+**Feedback loops (e.g., ring oscillators):** When a port carries a signal that feeds back to an input, use the port itself as the loop node — do NOT create an extra net:
+```
+# WRONG — extra net + port-to-net wire for ring closure:
+for i in range(stages):
+    in_net = node[i - 1] if i > 0 else node[stages - 1]
+    out_net = osc_out if i == stages - 1 else node[i]
+    Inverter inv[i](.a -- in_net; .y -- out_net; ...)
+osc_out -- node[stages - 1]   # ILLEGAL: port-to-net wire
+
+# CORRECT — use the port directly as the feedback node:
+for i in range(stages):
+    in_net = node[i - 1] if i > 0 else osc_out    # stage 0 reads from port
+    out_net = osc_out if i == stages - 1 else node[i]  # last stage writes to port
+    Inverter inv[i](.a -- in_net; .y -- out_net; ...)
+# Ring closes through osc_out automatically, no extra wire needed
+```
+
+Only use `net` for internal signals that are NOT exposed as ports (e.g., `net tail` connecting drain of a tail transistor to sources of a differential pair).
 
 ### Path Statement
 `path <name>` or `path <name>[<index>]` creates hierarchical grouping for buses and structured ports.
@@ -648,7 +685,9 @@ STAGE_GUIDANCE = {
         "**Execution fix hints:**\n"
         "- Check all imports are present (ordec.core, ordec.schematic, ordec.ord2.context)\n"
         "- Ensure nets are declared before use\n"
-        "- Use `.$` for parameters, `.` for pins"
+        "- Use `.$` for parameters, `.` for pins\n"
+        "- NEVER wire a port to a net (`port_name -- net_name` is illegal). Ports already act as nets — connect instances directly to the port.\n"
+        "- For feedback loops (ring oscillators), use the output port as the loop node instead of creating an extra net."
     ),
     "discovery": (
         "**Discovery fix hints:**\n"
@@ -664,7 +703,9 @@ STAGE_GUIDANCE = {
     ),
     "view_access": (
         "**View access fix hints:**\n"
-        "- Ensure cell has `viewgen schematic:` definition"
+        "- Ensure cell has `viewgen schematic:` definition\n"
+        "- NEVER wire a port to a net (`port_name -- net_name` is illegal). Ports already act as nets — connect instances directly to the port.\n"
+        "- For feedback loops (ring oscillators), use the output port as the loop node instead of creating an extra net."
     ),
     "rendering": (
         "**Rendering fix hints:**\n"

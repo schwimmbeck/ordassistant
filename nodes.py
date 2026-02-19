@@ -21,7 +21,7 @@ from config import (
     QUESTION_MODEL,
     RAG_TOP_K,
 )
-from contracts import ERR_NO_ORD_CODE, STAGE_EXTRACTION
+from contracts import ERR_NO_ORD_CODE, ERR_SPACING_VIOLATION, STAGE_EXTRACTION
 from models import IntentClassification, LayoutFixPlan
 from prompts import (
     CIRCUIT_RETRY_PROMPT,
@@ -37,10 +37,10 @@ from prompts import (
 from rag import get_vectorstore, query_similar_examples
 from state import PipelineState
 from validator import (
-    apply_layout_fixes,
     ensure_parameter_defaults,
     ensure_version_header,
     extract_ord_code,
+    fix_spacing_via_worker,
     strip_explicit_helpers,
     validate_ord_code_full,
 )
@@ -346,13 +346,29 @@ def layout_fixer(state: PipelineState) -> dict:
                 parts.append("route=False")
             print(f"    {' '.join(parts)}")
 
-        fixed_code = apply_layout_fixes(code, plan.changes)
+        changes_dicts = [c.model_dump() for c in plan.changes]
+        result = fix_spacing_via_worker(code, changes_dicts)
 
-        if fixed_code != code:
-            print(f"  [LAYOUT FIXER] Code modified ({len(code)} -> {len(fixed_code)} chars)")
-            return {"generated_code": fixed_code}
+        if result.success:
+            fixed_code = result.fixed_source or code
+            print(
+                f"  [LAYOUT FIXER] Object-level fix succeeded "
+                f"({len(code)} -> {len(fixed_code)} chars)"
+            )
+            return {"generated_code": fixed_code, "svg_bytes": result.svg_bytes}
 
-        print("  [LAYOUT FIXER] No changes applied, falling back to full regeneration")
+        if result.error_code == ERR_SPACING_VIOLATION:
+            print(
+                f"  [LAYOUT FIXER] Object-level fix still has violations, "
+                f"falling back to full regeneration"
+            )
+            feedback = result.error_message
+        else:
+            print(
+                f"  [LAYOUT FIXER] Object-level fix failed "
+                f"({result.error_stage}: {result.error_message[:80]}), "
+                f"falling back to full regeneration"
+            )
 
     except Exception as e:
         print(f"  [LAYOUT FIXER] Structured fix failed ({e}), falling back to full regeneration")
